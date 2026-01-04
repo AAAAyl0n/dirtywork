@@ -13,7 +13,7 @@ export default function Footer() {
         </p>
         <section className="mt-1 flex items-center gap-2 text-[13px] font-light tracking-tight text-neutral-600/50 dark:text-neutral-300/50">
           © 2021-{new Date().getFullYear()}{' '}
-          <a href={'https://github.com/hamster1963'}>@青色原野 Capital Today</a>
+          <a href={'https://github.com/AAAAyl0n/'}>@青色原野 Capital Today</a>
         </section>
       </section>
     </footer>
