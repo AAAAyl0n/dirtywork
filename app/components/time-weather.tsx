@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { cn } from '@/lib/utils'
 import { Cloud, CloudRain, Sun, CloudFog, CloudLightning, Snowflake, Moon, CloudDrizzle, CloudSun } from 'lucide-react'
 
 // Shanghai Pudong Kerry Parkside coordinates
@@ -73,8 +72,6 @@ export function TimeWeather() {
     }
   }, [])
 
-  if (!time) return null
-
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('zh-CN', {
       hour12: false,
@@ -85,9 +82,8 @@ export function TimeWeather() {
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('zh-CN', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
+      weekday: 'short',
+      month: 'short',
       day: 'numeric'
     })
   }
@@ -96,10 +92,8 @@ export function TimeWeather() {
     const info = WEATHER_CODES[code] || { label: '未知', icon: Cloud }
     let Icon = info.icon
     
-    // Simple logic to switch to Moon for clear nights if desired
-    // (though open-meteo weather codes are generic, 0 is clear sky)
     if (!isDay && (code === 0 || code === 1)) {
-        Icon = Moon
+      Icon = Moon
     }
     
     return { ...info, Icon }
@@ -107,33 +101,85 @@ export function TimeWeather() {
 
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode, weather.isDay) : null
 
-  return (
-    <div className="flex flex-col gap-2 py-8 select-none">
-      <div className="flex flex-col">
-        <h2 className="text-6xl font-bold tracking-tighter text-neutral-900 dark:text-neutral-100">
-          {formatTime(time)}
-        </h2>
-        <p className="text-neutral-500 dark:text-neutral-400 text-lg font-medium mt-2">
-          {formatDate(time)}
-        </p>
-      </div>
+  // Loading state
+  if (!time) {
+    return <TimeWeatherLoading />
+  }
 
-      <div className="flex items-center gap-3 text-neutral-600 dark:text-neutral-400 mt-2 text-sm font-medium">
-        {weather && weatherInfo ? (
-            <div className="flex items-center gap-2 bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 rounded-full">
-              <weatherInfo.Icon className="h-4 w-4" />
-              <span>{weather.temperature}°C {weatherInfo.label}</span>
-              <span className="text-neutral-300 dark:text-neutral-600">|</span>
-              <span>上海浦东嘉里城</span>
+  return (
+    <div className="flex flex-col gap-y-1 rounded-[10px] bg-neutral-200/40 p-1 dark:bg-neutral-700/50">
+      <div className="relative flex w-full rounded-md border-[0.5px] border-neutral-200 bg-white/80 p-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-none dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-none">
+        <div className="flex gap-x-2">
+          {/* Weather Icon - 类似专辑封面 */}
+          <div className="flex h-12 w-12 items-center justify-center rounded-[3px] bg-gradient-to-br from-neutral-800 to-neutral-600 dark:from-neutral-900 dark:to-neutral-700">
+            {weatherInfo ? (
+              <weatherInfo.Icon className="h-7 w-7 text-white" />
+            ) : (
+              <Cloud className="h-7 w-7 text-white animate-pulse" />
+            )}
+          </div>
+          {/* Time & Date - 类似歌曲名和艺术家 */}
+          <div className="flex flex-col justify-between py-1">
+            <div className="flex items-center gap-1.5 text-sm font-medium tabular-nums">
+              {formatTime(time)}
             </div>
-        ) : (
-           <div className="flex items-center gap-2 bg-neutral-100 dark:bg-neutral-800 px-3 py-1.5 rounded-full animate-pulse">
-             <span className="h-4 w-4 bg-neutral-200 dark:bg-neutral-700 rounded-full"></span>
-             <span className="h-4 w-20 bg-neutral-200 dark:bg-neutral-700 rounded"></span>
-           </div>
-        )}
+            <div className="text-xs opacity-30">
+              {formatDate(time)}
+            </div>
+          </div>
+        </div>
+        {/* Location - 右下角标识 */}
+        <div className="absolute bottom-2 right-2 flex flex-col justify-end">
+          <div className="flex flex-row items-center gap-x-1.5">
+            <p className="text-[10px] opacity-30">上海浦东</p>
+          </div>
+        </div>
+      </div>
+      {/* Weather Status Bar - 类似播放状态栏 */}
+      <div className="flex h-6 items-center justify-between px-1">
+        <div className="flex flex-row items-center gap-x-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+          </span>
+          <p className="text-xs opacity-50">
+            {weather && weatherInfo ? (
+              <>{weatherInfo.label}</>
+            ) : (
+              <>获取天气中...</>
+            )}
+          </p>
+        </div>
+        <div className="text-xs font-medium opacity-50 tabular-nums">
+          {weather ? `${weather.temperature}°C` : '--°C'}
+        </div>
       </div>
     </div>
   )
 }
 
+function TimeWeatherLoading() {
+  return (
+    <div className="flex flex-col gap-y-1 rounded-[10px] bg-neutral-200/40 p-1 dark:bg-neutral-700/50">
+      <div className="flex w-full justify-between rounded-md border-[0.5px] border-neutral-200 bg-white/80 p-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-none dark:border-neutral-700 dark:bg-neutral-900 dark:shadow-none">
+        <div className="flex gap-x-2">
+          <div className="h-12 w-12 rounded-[3px] bg-neutral-200 dark:bg-neutral-800 animate-pulse" />
+          <div className="flex flex-col justify-between py-1.5">
+            <div className="h-4 w-16 rounded-[3px] bg-neutral-100 dark:bg-neutral-800 animate-pulse" />
+            <div className="h-3 w-20 rounded-[3px] bg-neutral-100 dark:bg-neutral-800 animate-pulse" />
+          </div>
+        </div>
+        <div className="flex flex-col justify-end"></div>
+      </div>
+      <div className="flex h-6 items-center justify-between px-1">
+        <div className="flex flex-row items-center gap-x-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-200 dark:bg-neutral-700"></span>
+          </span>
+          <div className="h-2 w-24 rounded-md bg-neutral-200 dark:bg-neutral-700 animate-pulse" />
+        </div>
+        <div className="h-2 w-9 rounded-md bg-neutral-200 dark:bg-neutral-700 animate-pulse" />
+      </div>
+    </div>
+  )
+}
