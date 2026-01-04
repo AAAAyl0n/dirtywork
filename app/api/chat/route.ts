@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 const client = new OpenAI({
-  apiKey: 'sk-YWQV4nT05rPx1sPX3vjFXRH8ycibbWrxwNV8jarboYe5svQt',
+  apiKey: 'sk-GZzc1nlfxABudMYjwawg7cYu0k2eq3m7kqZcRc0tbcgfcUQ9',
   baseURL: 'https://yinli.one/v1',
 })
 

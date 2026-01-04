@@ -70,7 +70,7 @@ export default function Nav() {
 
   return (
     <div className="z-50 flex flex-col items-center justify-center">
-      <div className="fixed bottom-4 flex items-center gap-1 rounded-[50px] border-[1px] border-solid border-white/15 bg-stone-100 p-[3px] dark:bg-stone-800">
+      <div className="fixed bottom-4 left-1/2 -translate-x-[52%] flex items-center gap-1 rounded-[50px] border-[1px] border-solid border-white/15 bg-stone-100 p-[3px] dark:bg-stone-800">
         {indicator.w > 0 && (
           <div
             className="absolute inset-0 top-[3px] h-[35px] bg-white shadow-lg shadow-black/5 dark:bg-stone-700 dark:shadow-none"

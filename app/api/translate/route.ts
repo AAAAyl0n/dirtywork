@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const client = new OpenAI({
-  apiKey: 'sk-qX4Wcc7o1cH15L7KgaRDbBuBgryXzFmVWzYzTjzStdmNxXPj',
+  apiKey: 'sk-GZzc1nlfxABudMYjwawg7cYu0k2eq3m7kqZcRc0tbcgfcUQ9',
   baseURL: 'https://yinli.one/v1',
 });
 
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
 这是第 ${i + 1}/${chunks.length} 段内容。`;
 
             const completion = await client.chat.completions.create({
-              model: 'gemini-3-pro-preview',
+              model: 'gpt-4.1-2025-04-14',
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `请严格按照以下格式翻译，只输出翻译结果，不要添加任何其他内容：\n\n${chunk}` }

@@ -25,6 +25,43 @@ function SearchStatusBubble({ query }: { query: string }) {
   )
 }
 
+function ThinkingStatusBubble() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -5 }}
+      className="absolute bottom-4 left-4 right-4 flex items-center space-x-2 rounded-lg border border-neutral-100 bg-white/90 px-3 py-2 text-sm text-neutral-500 shadow-sm backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/90 dark:text-neutral-400 z-10"
+    >
+      <div className="flex h-4 w-4 items-center justify-center">
+        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+      <span>Thinking... This may take about 1-5 minutes.</span>
+    </motion.div>
+  )
+}
+
+function SumUpStatusBubble() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -5 }}
+      className="absolute bottom-4 left-4 right-4 flex items-center space-x-2 rounded-lg border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-sm text-emerald-600 shadow-sm backdrop-blur-sm dark:border-emerald-800/50 dark:bg-emerald-950/90 dark:text-emerald-400 z-10"
+    >
+      <div className="flex h-4 w-4 items-center justify-center">
+        <svg className="animate-pulse h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" />
+        </svg>
+      </div>
+      <span>Summarizing...</span>
+    </motion.div>
+  )
+}
+
 export default function RefinePage() {
   const [inputText, setInputText] = useState('')
   const [basePrompt, setBasePrompt] = useState('')
@@ -36,6 +73,8 @@ export default function RefinePage() {
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0) // Start from 0
   const [analysisDone, setAnalysisDone] = useState(false)
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
+  const [isThinking, setIsThinking] = useState(false)
+  const [isSumUp, setIsSumUp] = useState(false)
   
   const abortControllerRef = useRef<AbortController | null>(null)
   const outputTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -72,6 +111,8 @@ export default function RefinePage() {
         setAnalysisDone(false)
     }
     setSearchQuery(null)
+    setIsThinking(false)
+    setIsSumUp(false)
 
     abortControllerRef.current = new AbortController()
 
@@ -123,18 +164,39 @@ export default function RefinePage() {
                     setDisplayedPrompt(data.c)
                     setAnalysisDone(true)
                     setSearchQuery(null)
+                    setIsThinking(false)
+                    setIsSumUp(false)
                 } else if (data.t === 'c') {
                     // Append Content
                     setRefinedText((prev) => prev + data.c)
                     setSearchQuery(null)
+                    setIsThinking(false)
+                    setIsSumUp(false)
                 } else if (data.t === 'search') {
                     // Update Search Status
                     console.log('Search triggered:', data.c)
                     setSearchQuery(data.c)
+                    setIsThinking(false)
+                    setIsSumUp(false)
+                } else if (data.t === 'searchdone') {
+                    // Search completed, clear search bubble
+                    setSearchQuery(null)
+                } else if (data.t === 'thinking') {
+                    // Show Thinking bubble
+                    setSearchQuery(null)
+                    setIsThinking(true)
+                    setIsSumUp(false)
+                } else if (data.t === 'sumup') {
+                    // Show Sum up! bubble
+                    setSearchQuery(null)
+                    setIsThinking(false)
+                    setIsSumUp(true)
                 } else if (data.t === 's') {
                     // Update Status (e.g. "Processing chunk 1/5")
                     setStatus(data.c)
                     setSearchQuery(null)
+                    setIsThinking(false)
+                    setIsSumUp(false)
                     // Parse chunk index
                     const match = data.c.match(/Processing chunk (\d+)\/(\d+)/);
                     if (match) {
@@ -255,8 +317,10 @@ export default function RefinePage() {
                             ${loading ? 'bg-neutral-100 dark:bg-neutral-900 text-neutral-500' : 'bg-neutral-50 dark:bg-neutral-900 focus:border-neutral-400'}`
                         }
                     />
-                    <AnimatePresence>
+                    <AnimatePresence mode="wait">
                         {searchQuery && <SearchStatusBubble query={searchQuery} />}
+                        {!searchQuery && isThinking && <ThinkingStatusBubble />}
+                        {!searchQuery && !isThinking && isSumUp && <SumUpStatusBubble />}
                     </AnimatePresence>
                 </div>
             </div>
@@ -308,9 +372,8 @@ export default function RefinePage() {
         {/* Right Column: Output + Export Button + Status */}
         <div className="flex flex-col h-full">
             <div className="flex-1 flex flex-col min-h-0">
-                <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 flex justify-between">
-                    <span>Refined Output</span>
-                    <span className="text-neutral-400 font-normal">{status}</span>
+                <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                    Refined Output
                 </label>
                 <textarea
                     ref={outputTextareaRef}
