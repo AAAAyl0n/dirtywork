@@ -22,7 +22,7 @@ export default async function Page() {
           DirtyWork
         </h1>
         <p className="prose prose-neutral text-sm dark:prose-invert">
-          The toolbox of venture capitalists.
+        A modest toolbox for venture capitalists, unfortunately.
         </p>
         <p className={'mb-6 pt-10 text-lg font-medium tracking-tight'}>
           Welcome to dirtywork.top
