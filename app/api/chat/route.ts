@@ -92,7 +92,7 @@ export async function POST(request: Request) {
         try {
           // 第一次请求：开启流式
           const stream = await client.chat.completions.create({
-            model: 'claude-sonnet-4-5-20250929',
+            model: 'gpt-4o',
             messages,
             temperature: 0.3,
             tools,
