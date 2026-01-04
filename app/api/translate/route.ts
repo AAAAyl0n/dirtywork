@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const client = new OpenAI({
-  apiKey: 'sk-GZzc1nlfxABudMYjwawg7cYu0k2eq3m7kqZcRc0tbcgfcUQ9',
-  baseURL: 'https://yinli.one/v1',
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL,
 });
 
 // Helper to split text into chunks while preserving speaker context

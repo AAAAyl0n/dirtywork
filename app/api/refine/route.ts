@@ -5,17 +5,17 @@ export const runtime = 'nodejs'
 export const maxDuration = 300 // 5分钟超时，处理长文本
 
 const client = new OpenAI({
-  apiKey: 'sk-GZzc1nlfxABudMYjwawg7cYu0k2eq3m7kqZcRc0tbcgfcUQ9',
-  baseURL: 'https://yinli.one/v1',
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL,
 })
 
 // Gemini 专用客户端
 const geminiClient = new OpenAI({
-  apiKey: 'sk-qX4Wcc7o1cH15L7KgaRDbBuBgryXzFmVWzYzTjzStdmNxXPj',
-  baseURL: 'https://yinli.one/v1',
+  apiKey: process.env.GEMINI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL,
 })
 
-const TAVILY_API_KEY = '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'
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 
 // 定义工具
 const tools: OpenAI.ChatCompletionTool[] = [
