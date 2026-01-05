@@ -27,7 +27,7 @@ export default async function Page() {
         <p className={'mb-6 pt-10 text-lg font-medium tracking-tight'}>
           Welcome to dirtywork.top
           <br />
-          I dream that one day AI can secretly take over my job alone, and then I can just lie flat.
+          I dream that one day AI can secretly take over my job alone, and then I can just lie flat. ^^_
           <br />
 
         </p>
