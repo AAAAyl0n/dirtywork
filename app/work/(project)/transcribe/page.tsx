@@ -541,13 +541,13 @@ export default function TranscribePage() {
               ref={textareaRef}
               value={result}
               onChange={(e) => setResult(e.target.value)}
-              className="flex-1 w-full min-h-[400px] md:min-h-0 resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
+              className="flex-1 w-full min-h-[200px] max-h-[60vh] md:min-h-0 md:max-h-none resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
               placeholder="Transcription will appear here..."
             />
           ) : (
             <div
               ref={outputRef}
-              className="flex-1 w-full min-h-[200px] md:min-h-0 overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
+              className="flex-1 w-full min-h-[200px] max-h-[60vh] md:min-h-0 md:max-h-none overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
             >
               {result ? (
                 <div className="whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">
