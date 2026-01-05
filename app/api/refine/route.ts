@@ -135,10 +135,11 @@ function splitForProcessing(content: string, maxChunkSize = 2000): string[] {
     const line = lines[i]
 
     // 检查是否是说话人行
-    // 支持两种格式：
+    // 支持三种格式：
     // 1. "说话人：" 或 "说话人:" （中文/英文冒号结尾）
     // 2. "说话人   29:10" （名字 + 空格 + 时间戳，如 MM:SS 或 HH:MM:SS）
-    const speakerMatch = line.match(/^[A-Za-z\u4e00-\u9fa5]+(\s+\d{1,2}:\d{2}(:\d{2})?)?[：:]?\s*$/)
+    // 3. "**Kathy** (00:56)" （Markdown加粗 + 括号时间戳）
+    const speakerMatch = line.match(/^(\*\*)?[A-Za-z\u4e00-\u9fa5]+(\*\*)?(\s+\d{1,2}:\d{2}(:\d{2})?|\s*\(\d{1,2}:\d{2}(:\d{2})?\))?[：:]?\s*$/)
 
     if (speakerMatch) {
       const speaker = line
@@ -146,7 +147,7 @@ function splitForProcessing(content: string, maxChunkSize = 2000): string[] {
       i++
 
       // 收集直到下一个说话人
-      while (i < lines.length && !lines[i].match(/^[A-Za-z\u4e00-\u9fa5]+(\s+\d{1,2}:\d{2}(:\d{2})?)?[：:]?\s*$/)) {
+      while (i < lines.length && !lines[i].match(/^(\*\*)?[A-Za-z\u4e00-\u9fa5]+(\*\*)?(\s+\d{1,2}:\d{2}(:\d{2})?|\s*\(\d{1,2}:\d{2}(:\d{2})?\))?[：:]?\s*$/)) {
         contentLines.push(lines[i])
         i++
       }
@@ -244,13 +245,30 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   ]
 
   // 第一次请求，可能会调用工具
-  const response = await client.chat.completions.create({
-    model: 'claude-sonnet-4-5-20250929',
-    messages,
-    temperature: 0.2,
-    tools,
-    tool_choice: 'auto',
-  })
+  // 添加超时控制
+  const firstController = new AbortController()
+  const firstTimeoutId = setTimeout(() => firstController.abort(), 90000) // 90秒超时
+  
+  let response
+  try {
+    response = await client.chat.completions.create({
+      model: 'claude-sonnet-4-5-20250929',
+      messages,
+      temperature: 0.2,
+      tools,
+      tool_choice: 'auto',
+      max_tokens: 4096, // 限制输出长度
+    }, {
+      signal: firstController.signal,
+    })
+    clearTimeout(firstTimeoutId)
+  } catch (error) {
+    clearTimeout(firstTimeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[Claude] Request timed out after 90s')
+    }
+    throw error
+  }
 
   let assistantMessage = response.choices[0].message
 
@@ -284,15 +302,31 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
     // 再次请求获取最终结果
     onThinking() // 开始分析，显示 Thinking 框
     console.log('[Analysis] Sending request with messages:', JSON.stringify(geminiMessages, null, 2))
-    const response2 = await geminiClient.chat.completions.create({
-      model: 'gemini-3-pro-preview',
-      //model: 'claude-sonnet-4-5-20250929',
-      messages: geminiMessages,
-      temperature: 0.2,
-    })
-    console.log('[Gemini] Raw response:', JSON.stringify(response2, null, 2))
-    assistantMessage = response2.choices[0].message
-    console.log('[Gemini] Parsed message:', assistantMessage)
+    
+    // 添加超时控制，避免 Cloudflare 524 错误
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 90000) // 90秒超时
+    
+    try {
+      const response2 = await geminiClient.chat.completions.create({
+        model: 'gemini-3-pro-preview',
+        messages: geminiMessages,
+        temperature: 0.2,
+        max_tokens: 8192, // 增加限制，避免 JSON 被截断
+      }, {
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      console.log('[Gemini] Raw response:', JSON.stringify(response2, null, 2))
+      assistantMessage = response2.choices[0].message
+      console.log('[Gemini] Parsed message:', assistantMessage)
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[Gemini] Request timed out after 90s')
+      }
+      throw error
+    }
   }
 
   // 解析JSON
