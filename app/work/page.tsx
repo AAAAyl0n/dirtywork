@@ -3,6 +3,7 @@ import Link from 'next/link'
 // Reusing letter image for translate as requested (random pick from resources)
 import translateImg from 'public/work/translate.webp'
 import refineImg from 'public/work/refine.webp'
+import musicImg from 'public/work/music.webp'
 
 export const metadata = {
   title: 'Work',
@@ -42,6 +43,12 @@ export default function Page() {
             description="Intelligent text refinement and grammar correction."
             image={refineImg}
             link="/work/refine"
+          />
+          <WorkCard
+            title="Transcribe"
+            description="Speech to text powered by AssemblyAI."
+            image={musicImg}
+            link="/work/transcribe"
           />
         </div>
       </section>
