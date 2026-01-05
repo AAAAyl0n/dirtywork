@@ -1,8 +1,8 @@
 import Image from 'next/image'
 import avatar from 'app/avatar.webp'
 import Link from 'next/link'
-import { GitHubIcon } from './components/Icon'
 import { TimeWeather } from './components/time-weather'
+import { AuthButton } from './components/auth-button'
 
 export default async function Page() {
   return (
@@ -33,16 +33,7 @@ export default async function Page() {
         </p>
         <TimeWeather />
         <div className={'mt-6 flex items-center'}>
-          <Link href="https://github.com/AAAAyl0n" target="_blank">
-            <button
-              className={
-                'mr-4 flex items-center justify-center rounded-xl border-[0.5px] border-neutral-200 p-2 text-xs font-medium shadow-[0_2px_2px_rgba(0,0,0,0.04)] transition-all duration-300 hover:bg-stone-100 hover:shadow-none dark:border-neutral-700 dark:bg-neutral-700/20 dark:hover:bg-neutral-900/20'
-              }
-            >
-              <GitHubIcon className="mr-1 h-4" />
-              <p>GitHub</p>
-            </button>
-          </Link>
+          <AuthButton />
           <span className="mr-2 h-2 w-2 rounded-full bg-blue-500"></span>
           <Link
             href={'/work/translate'}
