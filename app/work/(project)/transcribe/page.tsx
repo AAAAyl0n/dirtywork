@@ -23,6 +23,9 @@ export default function TranscribePage() {
   // 编辑模式状态
   const [isEditMode, setIsEditMode] = useState(false)
   
+  // 复制状态反馈
+  const [copied, setCopied] = useState(false)
+  
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const outputRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -264,7 +267,21 @@ export default function TranscribePage() {
   const handleCopy = async () => {
     if (!result) return
     const processedResult = getProcessedResult()
-    await navigator.clipboard.writeText(processedResult)
+    try {
+      await navigator.clipboard.writeText(processedResult)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // 某些浏览器可能不支持 clipboard API，尝试 fallback
+      const textarea = document.createElement('textarea')
+      textarea.value = processedResult
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   // 重置
@@ -296,9 +313,9 @@ export default function TranscribePage() {
   }
 
   return (
-    <section className="flex flex-col h-[calc(100vh-180px)] sm:px-14 sm:pt-6 pb-8">
+    <section className="flex flex-col min-h-[calc(100vh-180px)] md:h-[calc(100vh-180px)] sm:px-14 sm:pt-6 pb-8">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4 md:mb-6 shrink-0">
         <div className="flex items-center gap-4 mb-2">
           <Link
             href="/work"
@@ -313,7 +330,7 @@ export default function TranscribePage() {
         </p>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 min-h-0">
         {/* Left Column */}
         <div className="flex flex-col min-h-0">
           {/* URL Input */}
@@ -368,8 +385,8 @@ export default function TranscribePage() {
             </div>
           </div>
 
-          {/* Instructions - scrollable */}
-          <div className="mt-4 flex-1 min-h-0 overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
+          {/* Instructions - scrollable on desktop, fixed height on mobile */}
+          <div className="mt-4 md:flex-1 min-h-0 max-h-96 md:max-h-none overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
             <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
               📋 使用说明
             </h3>
@@ -466,9 +483,9 @@ export default function TranscribePage() {
         </div>
 
         {/* Right Column */}
-        <div className="flex flex-col min-h-0">
+        <div className="flex flex-col min-h-0 mt-2 md:mt-0">
           {/* Result label with edit/preview toggle */}
-          <div className="flex items-center justify-between mb-2 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
             <label className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
               Transcription Result
             </label>
@@ -524,13 +541,13 @@ export default function TranscribePage() {
               ref={textareaRef}
               value={result}
               onChange={(e) => setResult(e.target.value)}
-              className="flex-1 w-full min-h-0 resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
+              className="flex-1 w-full min-h-[400px] md:min-h-0 resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
               placeholder="Transcription will appear here..."
             />
           ) : (
             <div
               ref={outputRef}
-              className="flex-1 w-full min-h-0 overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
+              className="flex-1 w-full min-h-[200px] md:min-h-0 overflow-auto rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 font-mono"
             >
               {result ? (
                 <div className="whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">
@@ -556,9 +573,13 @@ export default function TranscribePage() {
             <button
               onClick={handleCopy}
               disabled={!result}
-              className="flex-1 sm:flex-none rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+              className={`flex-1 sm:flex-none rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                copied 
+                  ? 'border-green-500 bg-green-50 text-green-600 dark:border-green-500 dark:bg-green-950 dark:text-green-400' 
+                  : 'border-neutral-200 bg-white text-neutral-900 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800'
+              }`}
             >
-              Copy
+              {copied ? '✓ Copied' : 'Copy'}
             </button>
           </div>
         </div>
