@@ -19,6 +19,8 @@
     "@heroicons/react": "^2.2.0",
     "@medusajs/ui": "^3.0.1",
     "@radix-ui/react-progress": "^1.1.1",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.89.0",
     "@tailwindcss/typography": "^0.5.15",
     "@types/lodash": "^4.17.14",
     "@types/node": "^22.10.5",
