@@ -295,7 +295,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       messages[1], // user content (chunk)
       {
         role: 'user',
-        content: `以下是搜索结果，请参考这些信息完成分析：\n\n${searchResults.join('\n\n')}\n\n请基于以上搜索结果和原文，输出JSON格式的分析结果。`,
+        content: `以下是搜索结果，请参考这些信息完成分析：\n\n${searchResults.join('\n\n')}\n\n请基于以上搜索结果和原文，输出JSON格式的分析结果。不要过度思考。`,
       },
     ]
 
