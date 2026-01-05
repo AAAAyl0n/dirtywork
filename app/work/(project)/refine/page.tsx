@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createClient } from '@/lib/supabase/client'
 
 function SearchStatusBubble({ query }: { query: string }) {
   return (
@@ -75,10 +76,22 @@ export default function RefinePage() {
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [isThinking, setIsThinking] = useState(false)
   const [isSumUp, setIsSumUp] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
   
   const abortControllerRef = useRef<AbortController | null>(null)
   const outputTextareaRef = useRef<HTMLTextAreaElement>(null)
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const supabase = createClient()
+
+  // Check login status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setIsLoggedIn(!!user)
+    }
+    checkAuth()
+  }, [])
 
   // Auto-scroll to bottom when refined text changes
   useEffect(() => {
@@ -93,6 +106,13 @@ export default function RefinePage() {
           promptTextareaRef.current.scrollTop = promptTextareaRef.current.scrollHeight
       }
   }, [displayedPrompt])
+
+  // Auto-save to history when completed
+  useEffect(() => {
+    if (isCompleted && isLoggedIn && refinedText && inputText) {
+      saveToHistory(inputText, refinedText)
+    }
+  }, [isCompleted])
 
   const runRefinement = async (startIndex: number, skipAnalysis: boolean) => {
     if (!inputText.trim() || loading) return
@@ -109,6 +129,7 @@ export default function RefinePage() {
         setDisplayedPrompt('')
         setCurrentChunkIndex(0)
         setAnalysisDone(false)
+        setSaveStatus('idle')
     }
     setSearchQuery(null)
     setIsThinking(false)
@@ -263,6 +284,33 @@ export default function RefinePage() {
     URL.revokeObjectURL(url)
   }
 
+  // Save to history when completed
+  const saveToHistory = async (original: string, result: string) => {
+    if (!isLoggedIn) return
+    
+    setSaveStatus('saving')
+    try {
+      const response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'refine',
+          originalText: original,
+          resultText: result,
+        }),
+      })
+      
+      if (response.ok) {
+        setSaveStatus('saved')
+      } else {
+        setSaveStatus('error')
+      }
+    } catch (error) {
+      console.error('Failed to save history:', error)
+      setSaveStatus('error')
+    }
+  }
+
   // Determine button state
   // Resume is available if not loading, not completed, and analysis is done (so we have a prompt to resume with)
   const canResume = !loading && !isCompleted && analysisDone;
@@ -372,9 +420,21 @@ export default function RefinePage() {
         {/* Right Column: Output + Export Button + Status */}
         <div className="flex flex-col h-full">
             <div className="flex-1 flex flex-col min-h-0">
-                <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                    Refined Output
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                        Refined Output
+                    </label>
+                    {/* Save Status - 右上角 */}
+                    {isLoggedIn && saveStatus === 'saving' && (
+                        <span className="text-xs text-neutral-400">保存中...</span>
+                    )}
+                    {isLoggedIn && saveStatus === 'saved' && (
+                        <span className="text-xs text-green-500">已保存到历史</span>
+                    )}
+                    {isLoggedIn && saveStatus === 'error' && (
+                        <span className="text-xs text-red-500">保存失败</span>
+                    )}
+                </div>
                 <textarea
                     ref={outputTextareaRef}
                     value={refinedText}

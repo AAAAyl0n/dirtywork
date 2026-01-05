@@ -1,17 +1,30 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { cn } from 'lib/utils'
 import Link from 'next/link'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
+import { createClient } from '@/lib/supabase/client'
 
 export default function TranslatePage() {
   const [inputText, setInputText] = useState('')
   const [translatedText, setTranslatedText] = useState('')
   const [loading, setLoading] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
+  
   const abortControllerRef = useRef<AbortController | null>(null)
   const outputTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const supabase = createClient()
+
+  // Check login status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setIsLoggedIn(!!user)
+    }
+    checkAuth()
+  }, [])
 
   // Auto-scroll to bottom when translated text changes
   useEffect(() => {
@@ -20,12 +33,20 @@ export default function TranslatePage() {
     }
   }, [translatedText])
 
+  // Auto-save to history when completed
+  useEffect(() => {
+    if (isCompleted && isLoggedIn && translatedText && inputText) {
+      saveToHistory(inputText, translatedText)
+    }
+  }, [isCompleted])
+
   const handleTranslate = async () => {
     if (!inputText.trim() || loading) return
 
     setLoading(true)
     setIsCompleted(false)
     setTranslatedText('')
+    setSaveStatus('idle')
     abortControllerRef.current = new AbortController()
 
     try {
@@ -85,6 +106,33 @@ export default function TranslatePage() {
     URL.revokeObjectURL(url)
   }
 
+  // Save to history
+  const saveToHistory = async (original: string, result: string) => {
+    if (!isLoggedIn) return
+    
+    setSaveStatus('saving')
+    try {
+      const response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'translate',
+          originalText: original,
+          resultText: result,
+        }),
+      })
+      
+      if (response.ok) {
+        setSaveStatus('saved')
+      } else {
+        setSaveStatus('error')
+      }
+    } catch (error) {
+      console.error('Failed to save history:', error)
+      setSaveStatus('error')
+    }
+  }
+
   return (
     <section className="flex flex-col h-[calc(100vh-150px)] sm:px-14 sm:pt-6">
       <div className="mb-6">
@@ -141,9 +189,21 @@ export default function TranslatePage() {
         {/* Right Column: Output + Export Button + Status */}
         <div className="flex flex-col h-full">
             <div className="flex-1 flex flex-col min-h-0">
-                <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                    Translated Text
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                        Translated Text
+                    </label>
+                    {/* Save Status - 右上角 */}
+                    {isLoggedIn && saveStatus === 'saving' && (
+                        <span className="text-xs text-neutral-400">保存中...</span>
+                    )}
+                    {isLoggedIn && saveStatus === 'saved' && (
+                        <span className="text-xs text-green-500">已保存到历史</span>
+                    )}
+                    {isLoggedIn && saveStatus === 'error' && (
+                        <span className="text-xs text-red-500">保存失败</span>
+                    )}
+                </div>
                 <textarea
                     ref={outputTextareaRef}
                     value={translatedText}
