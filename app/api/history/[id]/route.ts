@@ -35,6 +35,48 @@ export async function GET(
   }
 }
 
+// PATCH: 更新历史记录标题
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = await createClient()
+    const { id } = params
+    
+    // 获取当前用户
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { title } = await request.json()
+
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+      return Response.json({ error: 'Invalid title' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('project_history')
+      .update({ title: title.trim() })
+      .eq('id', id)
+      .eq('user_id', user.id) // 确保只能更新自己的记录
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Failed to update history:', error)
+      return Response.json({ error: 'Failed to update history' }, { status: 500 })
+    }
+
+    return Response.json({ success: true, data })
+  } catch (error) {
+    console.error('History Update API Error:', error)
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
 // DELETE: 删除历史记录
 export async function DELETE(
   request: Request,

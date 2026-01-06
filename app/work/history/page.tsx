@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, TrashIcon, PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 
@@ -29,6 +29,10 @@ export default function HistoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
 
@@ -80,6 +84,60 @@ export default function HistoryPage() {
       console.error('Delete failed:', err)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleStartEdit = (item: HistoryItem, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setEditingId(item.id)
+    setEditingTitle(item.title)
+    // 聚焦输入框
+    setTimeout(() => editInputRef.current?.focus(), 0)
+  }
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setEditingId(null)
+    setEditingTitle('')
+  }
+
+  const handleSaveEdit = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!editingTitle.trim()) return
+    
+    setSavingId(id)
+    try {
+      const response = await fetch(`/api/history/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editingTitle.trim() })
+      })
+      
+      if (response.ok) {
+        setHistory(prev => prev.map(item => 
+          item.id === id ? { ...item, title: editingTitle.trim() } : item
+        ))
+        setEditingId(null)
+        setEditingTitle('')
+      }
+    } catch (err) {
+      console.error('Save failed:', err)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSaveEdit(id, e as unknown as React.MouseEvent)
+    } else if (e.key === 'Escape') {
+      setEditingId(null)
+      setEditingTitle('')
     }
   }
 
@@ -196,9 +254,41 @@ export default function HistoryPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-neutral-700 dark:group-hover:text-neutral-300">
-                          {item.title}
-                        </h3>
+                        {editingId === item.id ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+                            <input
+                              ref={editInputRef}
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, item.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex-1 px-2 py-1 text-sm font-medium rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                              placeholder="输入标题..."
+                            />
+                            <button
+                              onClick={(e) => handleSaveEdit(item.id, e)}
+                              disabled={savingId === item.id || !editingTitle.trim()}
+                              className="p-1.5 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+                            >
+                              {savingId === item.id ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-300 border-t-green-600"></div>
+                              ) : (
+                                <CheckIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <h3 className="font-medium text-neutral-900 dark:text-neutral-100 truncate group-hover:text-neutral-700 dark:group-hover:text-neutral-300">
+                            {item.title}
+                          </h3>
+                        )}
                         <div className="flex items-center gap-3 mt-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${typeColors[item.type] || 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400'}`}>
                             {typeLabels[item.type] || item.type}
@@ -208,17 +298,27 @@ export default function HistoryPage() {
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={(e) => handleDelete(item.id, e)}
-                        disabled={deletingId === item.id}
-                        className="flex-shrink-0 p-2 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        {deletingId === item.id ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600"></div>
-                        ) : (
-                          <TrashIcon className="w-4 h-4" />
+                      <div className="flex-shrink-0 flex items-center gap-1">
+                        {editingId !== item.id && (
+                          <button
+                            onClick={(e) => handleStartEdit(item, e)}
+                            className="p-2 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={(e) => handleDelete(item.id, e)}
+                          disabled={deletingId === item.id}
+                          className="p-2 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          {deletingId === item.id ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600"></div>
+                          ) : (
+                            <TrashIcon className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </Link>
                 </motion.div>
