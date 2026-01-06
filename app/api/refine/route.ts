@@ -295,7 +295,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       messages[1], // user content (chunk)
       {
         role: 'user',
-        content: `以下是搜索结果，请参考这些信息完成分析：\n\n${searchResults.join('\n\n')}\n\n请基于以上搜索结果和原文，输出JSON格式的分析结果。不要过度思考。`,
+        content: `以下是搜索结果，请参考这些信息完成分析：\n\n${searchResults.join('\n\n')}\n\n请基于以上搜索结果和原文，输出JSON格式的分析结果。不要过度思考.`,
       },
     ]
 
@@ -312,7 +312,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         model: 'gemini-3-pro-preview',
         messages: geminiMessages,
         temperature: 0.2,
-        max_tokens: 8192, // 增加限制，避免 JSON 被截断
+        max_tokens: 16384, // 增加限制，给 reasoning + output 都留够空间
       }, {
         signal: controller.signal,
       })
