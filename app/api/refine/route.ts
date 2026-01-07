@@ -198,6 +198,29 @@ interface ContextPool {
   notes?: string[]
 }
 
+// 辅助函数：限制并发数的批量执行
+async function promiseAllWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let currentIndex = 0
+  
+  async function worker() {
+    while (currentIndex < tasks.length) {
+      const index = currentIndex++
+      results[index] = await tasks[index]()
+    }
+  }
+  
+  const workers = Array(Math.min(concurrency, tasks.length))
+    .fill(null)
+    .map(() => worker())
+  
+  await Promise.all(workers)
+  return results
+}
+
 // 分析单个chunk，生成context pool
 async function analyzeChunk(
   chunk: string,
@@ -214,7 +237,7 @@ async function analyzeChunk(
     return { characters: [], terminology: [], corrections: [] }
   }
 
-  const systemPrompt = `你是一个专业的语音转文字内容分析专家。你的任务是分析对话文本，提取关键上下文信息。
+  const systemPrompt = `你是一个专业的语音转文字内容分析专家。你的任务是分析对话文本，提取关键上下文信息。不要过度思考。
 
 ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 
@@ -247,7 +270,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   // 第一次请求，可能会调用工具
   // 添加超时控制
   const firstController = new AbortController()
-  const firstTimeoutId = setTimeout(() => firstController.abort(), 360000) // 90秒超时
+  const firstTimeoutId = setTimeout(() => firstController.abort(), 3600000) // 90秒超时
   
   let response
   try {
@@ -305,11 +328,11 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
     
     // 添加超时控制，避免 Cloudflare 524 错误
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 360000) // 90秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 3600000) // 90秒超时
     
     try {
       const response2 = await geminiClient.chat.completions.create({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3-flash-preview-thinking',
         messages: geminiMessages,
         temperature: 0.2,
         max_tokens: 16384, // 增加限制，给 reasoning + output 都留够空间
@@ -323,7 +346,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
     } catch (error) {
       clearTimeout(timeoutId)
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('[Gemini] Request timed out after 90s')
+        console.error('[Gemini] Request timed out after 360s')
       }
       throw error
     }
@@ -490,8 +513,8 @@ export async function POST(request: Request) {
 
             const analysisChunks = splitForAnalysis(text, 4000)
 
-            // 并发分析所有chunks
-            const contextPoolPromises = analysisChunks.map((chunk, index) =>
+            // 分批并发分析chunks（限制并发数为2，避免触发代理限制）
+            const contextPoolTasks = analysisChunks.map((chunk, index) => () =>
               analyzeChunk(
                 chunk,
                 index,
@@ -503,7 +526,7 @@ export async function POST(request: Request) {
               )
             )
 
-            const contextPools = await Promise.all(contextPoolPromises)
+            const contextPools = await promiseAllWithConcurrency(contextPoolTasks, 15)
 
             // 合并context pools
             send('sumup', '') // 显示 Sum up! 框
