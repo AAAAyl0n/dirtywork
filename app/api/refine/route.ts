@@ -247,7 +247,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   // 第一次请求，可能会调用工具
   // 添加超时控制
   const firstController = new AbortController()
-  const firstTimeoutId = setTimeout(() => firstController.abort(), 90000) // 90秒超时
+  const firstTimeoutId = setTimeout(() => firstController.abort(), 360000) // 90秒超时
   
   let response
   try {
@@ -305,7 +305,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
     
     // 添加超时控制，避免 Cloudflare 524 错误
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 90000) // 90秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 360000) // 90秒超时
     
     try {
       const response2 = await geminiClient.chat.completions.create({
