@@ -1,6 +1,4 @@
-import { cn } from 'lib/utils'
-import BlurFade from '../components/blur-fade'
-import ArxivSwitch from './arxiv-switch'
+import ArticlesClient from './articles-client'
 
 export const metadata = {
   title: 'Articles',
@@ -53,47 +51,9 @@ const articles = [
 ]
 
 export default async function BlogPage() {
-  const sortedArticles = [...articles].sort((a, b) => {
-    const aTime = a.publishedAt === '未注明' ? 0 : Date.parse(a.publishedAt)
-    const bTime = b.publishedAt === '未注明' ? 0 : Date.parse(b.publishedAt)
-    return bTime - aTime
-  })
-
   return (
     <section className="sm:px-14 sm:pt-6">
-      <h1 className="mb-2 text-2xl font-medium tracking-tighter">Articles</h1>
-      <p className="prose prose-neutral mb-2 text-sm dark:prose-invert">
-        这里推送一些论文，优质博客，技术文章，等等。
-      </p>
-      <ArxivSwitch />
-
-      <div className="mt-6 flex flex-col gap-4">
-        {sortedArticles.map((article) => (
-          <BlurFade key={article.url} yOffset={0} inView>
-            <a
-              href={article.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                'group flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-4 transition-all',
-                'hover:bg-neutral-100 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800'
-              )}
-            >
-              <div className="flex flex-col gap-1">
-                <span className="font-medium text-neutral-900 dark:text-neutral-100">
-                  {article.title}
-                </span>
-                <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {article.author} · {article.publishedAt} · {article.source}
-                </span>
-              </div>
-              <div className="text-neutral-400 transition-transform group-hover:translate-x-1">
-                →
-              </div>
-            </a>
-          </BlurFade>
-        ))}
-      </div>
+      <ArticlesClient initialArticles={articles} />
     </section>
   )
 }
