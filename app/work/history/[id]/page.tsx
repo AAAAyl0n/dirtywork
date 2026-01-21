@@ -23,12 +23,42 @@ const typeColors: Record<string, string> = {
   translate: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
+const mockHistoryDetail: Record<string, HistoryDetail> = {
+  'dev-refine-1': {
+    id: 'dev-refine-1',
+    type: 'refine',
+    title: '本地预览：内容精修示例',
+    original_text: '这是本地预览用的原始文本示例。',
+    result_text: '这是本地预览用的精修后文本示例。',
+    created_at: new Date().toISOString(),
+  },
+  'dev-translate-1': {
+    id: 'dev-translate-1',
+    type: 'translate',
+    title: '本地预览：中英翻译示例',
+    original_text: 'Hello world. This is a local preview entry.',
+    result_text: '你好，世界。这是一条本地预览记录。',
+    created_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+  },
+}
+
 export default function HistoryDetailPage({ params }: { params: { id: string } }) {
   const [history, setHistory] = useState<HistoryDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    const isLocalDev =
+      process.env.NODE_ENV === 'development' &&
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+    if (isLocalDev && mockHistoryDetail[params.id]) {
+      setHistory(mockHistoryDetail[params.id])
+      setLoading(false)
+      return
+    }
+
     fetchHistoryDetail()
   }, [params.id])
 

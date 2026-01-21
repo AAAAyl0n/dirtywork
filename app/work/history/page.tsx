@@ -23,6 +23,21 @@ const typeColors: Record<string, string> = {
   translate: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
+const mockHistory: HistoryItem[] = [
+  {
+    id: 'dev-refine-1',
+    type: 'refine',
+    title: '本地预览：内容精修示例',
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 'dev-translate-1',
+    type: 'translate',
+    title: '本地预览：中英翻译示例',
+    created_at: new Date(Date.now() - 3600 * 1000).toISOString(),
+  },
+]
+
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,11 +47,24 @@ export default function HistoryPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [showMobileActions, setShowMobileActions] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
 
   useEffect(() => {
+    const isLocalDev =
+      process.env.NODE_ENV === 'development' &&
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+    if (isLocalDev) {
+      setIsLoggedIn(true)
+      setHistory(mockHistory)
+      setLoading(false)
+      return
+    }
+
     checkAuthAndFetch()
   }, [])
 
@@ -74,6 +102,16 @@ export default function HistoryPage() {
     
     if (!confirm('确定要删除这条记录吗？')) return
     
+    const isLocalDev =
+      process.env.NODE_ENV === 'development' &&
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+    if (isLocalDev) {
+      setHistory(prev => prev.filter(item => item.id !== id))
+      return
+    }
+
     setDeletingId(id)
     try {
       const response = await fetch(`/api/history/${id}`, { method: 'DELETE' })
@@ -109,6 +147,20 @@ export default function HistoryPage() {
     
     if (!editingTitle.trim()) return
     
+    const isLocalDev =
+      process.env.NODE_ENV === 'development' &&
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+    if (isLocalDev) {
+      setHistory(prev =>
+        prev.map(item => (item.id === id ? { ...item, title: editingTitle.trim() } : item))
+      )
+      setEditingId(null)
+      setEditingTitle('')
+      return
+    }
+
     setSavingId(id)
     try {
       const response = await fetch(`/api/history/${id}`, {
@@ -214,6 +266,18 @@ export default function HistoryPage() {
             <ArrowLeftIcon className="w-5 h-5" />
           </Link>
           <h1 className="text-2xl font-medium tracking-tighter">History</h1>
+          <div className="ml-auto sm:hidden">
+            <button
+              onClick={() => setShowMobileActions(prev => !prev)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                showMobileActions
+                  ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
+                  : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+              }`}
+            >
+              编辑
+            </button>
+          </div>
         </div>
         <p className="prose prose-neutral text-sm dark:prose-invert">
           查看你之前处理过的项目记录
@@ -302,7 +366,11 @@ export default function HistoryPage() {
                         {editingId !== item.id && (
                           <button
                             onClick={(e) => handleStartEdit(item, e)}
-                            className="p-2 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                            className={`p-2 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
+                              showMobileActions
+                                ? 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                                : 'opacity-0 group-hover:opacity-100'
+                            }`}
                           >
                             <PencilIcon className="w-4 h-4" />
                           </button>
@@ -310,7 +378,11 @@ export default function HistoryPage() {
                         <button
                           onClick={(e) => handleDelete(item.id, e)}
                           disabled={deletingId === item.id}
-                          className="p-2 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors opacity-0 group-hover:opacity-100"
+                          className={`p-2 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors ${
+                            showMobileActions
+                              ? 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                              : 'opacity-0 group-hover:opacity-100'
+                          }`}
                         >
                           {deletingId === item.id ? (
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600"></div>
