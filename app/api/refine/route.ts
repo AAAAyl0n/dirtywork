@@ -9,6 +9,13 @@ const client = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL,
 })
 
+const claudeClient = new OpenAI({
+  apiKey: process.env.CLAUDE_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: process.env.CLAUDE_BASE_URL || process.env.OPENAI_BASE_URL,
+})
+
+const isClaudeModel = (model: string) => model.startsWith('claude-')
+
 // Gemini 专用客户端
 const geminiClient = new OpenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -274,8 +281,10 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   
   let response
   try {
-    response = await client.chat.completions.create({
-      model: 'claude-sonnet-4-5-20250929',
+    const model = 'claude-sonnet-4-5-20250929'
+    const modelClient = isClaudeModel(model) ? claudeClient : client
+    response = await modelClient.chat.completions.create({
+      model,
       messages,
       temperature: 0.2,
       tools,

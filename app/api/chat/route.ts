@@ -8,6 +8,13 @@ const client = new OpenAI({
   baseURL: process.env.OPENAI_BASE_URL,
 })
 
+const claudeClient = new OpenAI({
+  apiKey: process.env.CLAUDE_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: process.env.CLAUDE_BASE_URL || process.env.OPENAI_BASE_URL,
+})
+
+const isClaudeModel = (model: string) => model.startsWith('claude-')
+
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 
 // 定义工具
@@ -172,8 +179,10 @@ export async function POST(request: Request) {
             }
 
             // 4. 带上工具结果，再次请求模型 (这次开启流式)
-            const stream2 = await client.chat.completions.create({
-              model: 'claude-sonnet-4-5-20250929',
+            const model = 'claude-sonnet-4-5-20250929'
+            const modelClient = isClaudeModel(model) ? claudeClient : client
+            const stream2 = await modelClient.chat.completions.create({
+              model,
               messages,
               temperature: 0.3,
               stream: true,
