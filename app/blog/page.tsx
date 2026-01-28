@@ -7,6 +7,13 @@ export const metadata = {
 
 const articles = [
   {
+    title: '对话拓竹陶冶：我们一群工程师，一起造个朴素的硬核公司',
+    url: 'https://mp.weixin.qq.com/s/KczhjI3IEbJe10rnbe5G2w',
+    source: '微信公众号',
+    author: '晚点团队',
+    publishedAt: '2026-01-26',
+  },
+  {
     title: 'Emergence of Human to Robot Transfer in VLAs',
     url: 'https://www.pi.website/research/human_to_robot',
     source: 'Physical Intelligence',
