@@ -7,6 +7,13 @@ export const metadata = {
 
 const articles = [
   {
+    title: '为什么音乐的音调是离散频率，不能有连续频率变化的音乐吗？',
+    url: 'https://www.zhihu.com/question/1998934565625041679/answer/1999790856752891418',
+    source: '知乎',
+    author: 'DBinary',
+    publishedAt: '2026-01-28',
+  },
+  {
     title: '对话拓竹陶冶：我们一群工程师，一起造个朴素的硬核公司',
     url: 'https://mp.weixin.qq.com/s/KczhjI3IEbJe10rnbe5G2w',
     source: '微信公众号',

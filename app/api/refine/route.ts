@@ -344,7 +344,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         model: 'gemini-3-flash-preview-thinking',
         messages: geminiMessages,
         temperature: 0.2,
-        max_tokens: 16384, // 增加限制，给 reasoning + output 都留够空间
+        max_tokens: 32768, // 增加限制，给 reasoning + output 都留够空间
       }, {
         signal: controller.signal,
       })
