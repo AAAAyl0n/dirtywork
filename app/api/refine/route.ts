@@ -23,6 +23,7 @@ const geminiClient = new OpenAI({
 })
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
+const SEARCH_RESULT_MAX_CHARS = 1000
 
 // 定义工具
 const tools: OpenAI.ChatCompletionTool[] = [
@@ -79,18 +80,24 @@ async function handleWebSearch(query: string): Promise<string> {
 
     if (data.answer) {
       const snippets = data.results.map((r: any) => `- ${r.title}: ${r.content}`).join('\n')
-      return `Answer: ${data.answer}\n\nReference Snippets:\n${snippets}`
+      const full = `Answer: ${data.answer}\n\nReference Snippets:\n${snippets}`
+      return truncateSearchResult(full)
     }
 
     const result = data.results
       .map((r: any) => `Title: ${r.title}\nURL: ${r.url}\nContent: ${r.content}`)
       .join('\n\n')
     
-    return result || `No meaningful results for: ${query}`
+    return truncateSearchResult(result || `No meaningful results for: ${query}`)
   } catch (error) {
     console.error('[Search] Error:', error)
     return `Search failed due to error: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
+}
+
+function truncateSearchResult(text: string): string {
+  if (text.length <= SEARCH_RESULT_MAX_CHARS) return text
+  return `${text.slice(0, SEARCH_RESULT_MAX_CHARS)}\n\n[Truncated]`
 }
 
 // 按4000字分割文本（用于上下文分析）
@@ -205,6 +212,24 @@ interface ContextPool {
   notes?: string[]
 }
 
+function parseJsonFromText<T>(text: string): T | null {
+  if (!text) return null
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fenced ? fenced[1] : text
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) return null
+  const rawJson = candidate.slice(start, end + 1)
+  const cleaned = rawJson
+    .replace(/,\s*([}\]])/g, '$1') // remove trailing commas
+    .trim()
+  try {
+    return JSON.parse(cleaned) as T
+  } catch {
+    return null
+  }
+}
+
 // 辅助函数：限制并发数的批量执行
 async function promiseAllWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -244,7 +269,7 @@ async function analyzeChunk(
     return { characters: [], terminology: [], corrections: [] }
   }
 
-  const systemPrompt = `你是一个专业的语音转文字内容分析专家。你的任务是分析对话文本，提取关键上下文信息。不要过度思考。
+  const systemPrompt = `你是一个专业的语音转文字内容分析专家。你的任务是分析对话文本，提取关键上下文信息。不要过度思考，尽可能精简输出。
 
 ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 
@@ -264,9 +289,9 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 }
 
 注意：
-1. 用户提供的是一个音频转文本的内容，可能包含较多听写错误，请注意纠正。
-2. 如果遇到不确定的专有名词、公司名称或技术术语，你自己无法确定时，使用搜索工具验证，并推测、确认名词是否正确。
-3. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。
+1. 用户提供的是一个音频转文本的内容，可能包含较多听写错误，包含人名错误、公司名错误、语病，请注意纠正。
+2. 如果遇到不确定的专有名词、公司名称或技术术语，如果无法判断，必须使用搜索工具验证，并推测、确认名词是否正确。
+3. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。尽可能多的寻找和给出纠错。
 4. 返回纯JSON格式，不要有其他文字`
 
   let messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -290,7 +315,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       temperature: 0.2,
       tools,
       tool_choice: 'auto',
-      max_tokens: 4096, // 限制输出长度
+      max_tokens: 8192,
     }, {
       signal: firstController.signal,
     })
@@ -304,6 +329,10 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   }
 
   let assistantMessage = response.choices[0].message
+  console.log('[Analyze] Model output:', {
+    content: assistantMessage.content,
+    tool_calls: assistantMessage.tool_calls,
+  })
 
   // 处理工具调用
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
@@ -316,6 +345,8 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         const args = JSON.parse(tc.function.arguments)
         onSearch(args.query)
         const searchResult = await handleWebSearch(args.query)
+        console.log('[Search] Query:', args.query)
+        console.log('[Search] Result:', searchResult)
         onSearchDone() // 搜索完成，清除搜索框
         toolMessages.push({
           role: 'tool',
@@ -343,12 +374,16 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         temperature: 0.2,
         tools,
         tool_choice: 'auto',
-        max_tokens: 4096,
+        max_tokens: 16384,
       }, {
         signal: controller.signal,
       })
       clearTimeout(timeoutId)
       assistantMessage = response2.choices[0].message
+      console.log('[Analyze] Followup output:', {
+        content: assistantMessage.content,
+        tool_calls: assistantMessage.tool_calls,
+      })
     } catch (error) {
       clearTimeout(timeoutId)
       if (error instanceof Error && error.name === 'AbortError') {
@@ -361,16 +396,12 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   // 解析JSON
   try {
     const content = assistantMessage.content || '{}'
-    // 提取JSON部分
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0])
-    }
-    return { characters: [], terminology: [], corrections: [] }
+    const parsed = parseJsonFromText<ContextPool>(content)
+    if (parsed) return parsed
   } catch (e) {
     console.error('Failed to parse context JSON:', e)
-    return { characters: [], terminology: [], corrections: [] }
   }
+  return { characters: [], terminology: [], corrections: [] }
 }
 
 // 合并多个context pools
@@ -392,7 +423,7 @@ async function mergeContextPools(
 1. 合并相同的人物，保留最完整的描述
 2. 去重术语，合并相同术语的不同描述
 3. 合并纠错表，去除重复项
-4. 输出纯JSON格式
+4. 输出纯JSON格式，一定要注意格式，要输出可解析的纯JSON
 
 待合并的JSON数组：
 ${JSON.stringify(pools, null, 2)}
@@ -404,7 +435,6 @@ ${JSON.stringify(pools, null, 2)}
     messages: [{ role: 'user', content: mergePrompt }],
     temperature: 0.1,
     stream: true,
-    max_tokens: 4096,
   })
 
   let mergedContent = ''
@@ -412,25 +442,28 @@ ${JSON.stringify(pools, null, 2)}
     const delta = part.choices[0]?.delta?.content || ''
     if (delta) {
       mergedContent += delta
+      //console.log('[Merge] Stream delta:', delta)
       onStream?.(delta)
     }
   }
 
+  const fallbackMerge = (): ContextPool => ({
+    characters: pools.flatMap((p) => p.characters || []),
+    terminology: pools.flatMap((p) => p.terminology || []),
+    corrections: pools.flatMap((p) => p.corrections || []),
+    notes: pools.flatMap((p) => p.notes || []),
+  })
+
   try {
-    const jsonMatch = mergedContent.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0])
-    }
-    return pools[0] // fallback
+    console.log('[Merge] Raw merged content:', mergedContent)
+    const parsed = parseJsonFromText<ContextPool>(mergedContent)
+    if (parsed) return parsed
+    console.warn('[Merge] Parse failed, using fallback merge')
+    return fallbackMerge()
   } catch (e) {
     console.error('Failed to merge context pools:', e)
     // fallback: 简单合并
-    return {
-      characters: pools.flatMap((p) => p.characters || []),
-      terminology: pools.flatMap((p) => p.terminology || []),
-      corrections: pools.flatMap((p) => p.corrections || []),
-      notes: pools.flatMap((p) => p.notes || []),
-    }
+    return fallbackMerge()
   }
 }
 
@@ -530,7 +563,7 @@ export async function POST(request: Request) {
           if (!skipContextAnalysis) {
             send('s', 'Analyzing context...')
 
-            const analysisChunks = splitForAnalysis(text, 4000)
+            const analysisChunks = splitForAnalysis(text, 2000)
 
             // 分批并发分析chunks（限制并发数为2，避免触发代理限制）
             const contextPoolTasks = analysisChunks.map((chunk, index) => () =>
@@ -545,7 +578,7 @@ export async function POST(request: Request) {
               )
             )
 
-            const contextPools = await promiseAllWithConcurrency(contextPoolTasks, 15)
+            const contextPools = await promiseAllWithConcurrency(contextPoolTasks, 8)
 
             // 合并context pools
             send('sumup', '') // 显示 Sum up! 框
@@ -582,6 +615,7 @@ export async function POST(request: Request) {
             for await (const part of stream) {
               const content = part.choices[0]?.delta?.content || ''
               if (content) {
+                //console.log('[Refine] Stream delta:', content)
                 send('c', content)
               }
             }
