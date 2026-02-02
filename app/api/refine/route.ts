@@ -564,6 +564,9 @@ export async function POST(request: Request) {
             send('s', 'Analyzing context...')
 
             const analysisChunks = splitForAnalysis(text, 2000)
+            let completedChunks = 0
+            const totalChunks = analysisChunks.length
+            send('ap', JSON.stringify({ done: completedChunks, total: totalChunks }))
 
             // 分批并发分析chunks（限制并发数为2，避免触发代理限制）
             const contextPoolTasks = analysisChunks.map((chunk, index) => () =>
@@ -575,7 +578,11 @@ export async function POST(request: Request) {
                 (query) => send('search', query),
                 () => send('searchdone', ''),
                 () => send('thinking', '')
-              )
+              ).then((result) => {
+                completedChunks += 1
+                send('ap', JSON.stringify({ done: completedChunks, total: totalChunks }))
+                return result
+              })
             )
 
             const contextPools = await promiseAllWithConcurrency(contextPoolTasks, 8)
@@ -590,6 +597,7 @@ export async function POST(request: Request) {
           } else {
             // 跳过分析，使用传入的basePrompt
             finalPrompt = basePrompt
+            send('ap', JSON.stringify({ done: 0, total: 0 }))
           }
 
           // 第二阶段：逐chunk精修

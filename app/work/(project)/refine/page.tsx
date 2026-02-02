@@ -76,8 +76,12 @@ export default function RefinePage() {
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [isThinking, setIsThinking] = useState(false)
   const [isSumUp, setIsSumUp] = useState(false)
+  const [analysisProgress, setAnalysisProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
+  const analysisPercent = analysisProgress.total > 0
+    ? Math.round((analysisProgress.done / analysisProgress.total) * 100)
+    : 0
   
   const abortControllerRef = useRef<AbortController | null>(null)
   const outputTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -131,6 +135,7 @@ export default function RefinePage() {
         setAnalysisDone(false)
         setSaveStatus('idle')
     }
+    setAnalysisProgress({ done: 0, total: 0 })
     setSearchQuery(null)
     setIsThinking(false)
     setIsSumUp(false)
@@ -218,6 +223,14 @@ export default function RefinePage() {
                     setSearchQuery(null)
                     setIsThinking(false)
                     setIsSumUp(true)
+                } else if (data.t === 'ap') {
+                    // Analysis progress
+                    try {
+                        const { done, total } = JSON.parse(data.c)
+                        setAnalysisProgress({ done, total })
+                    } catch (e) {
+                        console.warn('Failed to parse analysis progress:', data.c, e)
+                    }
                 } else if (data.t === 's') {
                     // Update Status (e.g. "Processing chunk 1/5")
                     setStatus(data.c)
@@ -359,6 +372,20 @@ export default function RefinePage() {
                  <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
                     {loading ? 'Live System Prompt' : 'Base System Prompt (Optional)'}
                 </label>
+                {loading && analysisProgress.total > 0 && !analysisDone && !isSumUp && (
+                    <div className="mb-2">
+                        <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+                            <span>Analyzing chunks</span>
+                            <span>{analysisProgress.done}/{analysisProgress.total} ({analysisPercent}%)</span>
+                        </div>
+                        <div className="mt-2 h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
+                            <div
+                                className="h-2 rounded-full bg-emerald-500 transition-all"
+                                style={{ width: `${analysisPercent}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
                 <div className="relative flex-1 min-h-0">
                     <textarea
                         ref={promptTextareaRef}
