@@ -265,7 +265,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 
 注意：
 1. 用户提供的是一个音频转文本的内容，可能包含较多听写错误，请注意纠正。
-2. 如果遇到不确定的专有名词、公司名称或技术术语，必须使用搜索工具验证，并推测、确认名词是否正确。可能遇到公司名听写错误，但错误识别为另一个公司（例如星猿辙->新原则），搜索前请先思考确认，避免出现此类搜索错误。
+2. 如果遇到不确定的专有名词、公司名称或技术术语，你自己无法确定时，使用搜索工具验证，并推测、确认名词是否正确。
 3. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。
 4. 返回纯JSON格式，不要有其他文字`
 
@@ -279,10 +279,11 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   const firstController = new AbortController()
   const firstTimeoutId = setTimeout(() => firstController.abort(), 3600000) // 90秒超时
   
+  const model = 'gemini-3-flash-preview-thinking'
+  const modelClient = geminiClient
+
   let response
   try {
-    const model = 'claude-sonnet-4-5-20250929'
-    const modelClient = isClaudeModel(model) ? claudeClient : client
     response = await modelClient.chat.completions.create({
       model,
       messages,
@@ -297,7 +298,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   } catch (error) {
     clearTimeout(firstTimeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('[Claude] Request timed out after 90s')
+      console.error('[Gemini] Request timed out after 90s')
     }
     throw error
   }
@@ -306,9 +307,8 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 
   // 处理工具调用
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-    // 收集所有搜索结果
-    const searchResults: string[] = []
-    
+    const toolMessages: OpenAI.ChatCompletionMessageParam[] = []
+
     for (const toolCall of assistantMessage.tool_calls) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tc = toolCall as any
@@ -317,41 +317,38 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         onSearch(args.query)
         const searchResult = await handleWebSearch(args.query)
         onSearchDone() // 搜索完成，清除搜索框
-        searchResults.push(`【搜索: ${args.query}】\n${searchResult}`)
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: searchResult,
+        })
       }
     }
 
-    // 构建 Gemini 友好的消息格式（不使用 tool_calls）
-    const geminiMessages: OpenAI.ChatCompletionMessageParam[] = [
-      messages[0], // system prompt
-      messages[1], // user content (chunk)
-      {
-        role: 'user',
-        content: `以下是搜索结果，请参考这些信息完成分析：\n\n${searchResults.join('\n\n')}\n\n请基于以上搜索结果和原文，输出JSON格式的分析结果。不要过度思考.`,
-      },
+    // 再次请求获取最终结果（标准 tool-call 循环）
+    onThinking() // 开始分析，显示 Thinking 框
+    const followupMessages: OpenAI.ChatCompletionMessageParam[] = [
+      ...messages,
+      assistantMessage,
+      ...toolMessages,
     ]
 
-    // 再次请求获取最终结果
-    onThinking() // 开始分析，显示 Thinking 框
-    console.log('[Analysis] Sending request with messages:', JSON.stringify(geminiMessages, null, 2))
-    
-    // 添加超时控制，避免 Cloudflare 524 错误
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 3600000) // 90秒超时
-    
+
     try {
-      const response2 = await geminiClient.chat.completions.create({
-        model: 'gemini-3-flash-preview-thinking',
-        messages: geminiMessages,
+      const response2 = await modelClient.chat.completions.create({
+        model,
+        messages: followupMessages,
         temperature: 0.2,
-        max_tokens: 32768, // 增加限制，给 reasoning + output 都留够空间
+        tools,
+        tool_choice: 'auto',
+        max_tokens: 4096,
       }, {
         signal: controller.signal,
       })
       clearTimeout(timeoutId)
-      console.log('[Gemini] Raw response:', JSON.stringify(response2, null, 2))
       assistantMessage = response2.choices[0].message
-      console.log('[Gemini] Parsed message:', assistantMessage)
     } catch (error) {
       clearTimeout(timeoutId)
       if (error instanceof Error && error.name === 'AbortError') {
@@ -377,7 +374,10 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 }
 
 // 合并多个context pools
-async function mergeContextPools(pools: ContextPool[]): Promise<ContextPool> {
+async function mergeContextPools(
+  pools: ContextPool[],
+  onStream?: (delta: string) => void
+): Promise<ContextPool> {
   if (pools.length === 0) {
     return { characters: [], terminology: [], corrections: [] }
   }
@@ -399,15 +399,25 @@ ${JSON.stringify(pools, null, 2)}
 
 请输出合并后的单个JSON对象：`
 
-  const response = await client.chat.completions.create({
+  const stream = await client.chat.completions.create({
     model: 'gpt-4.1-2025-04-14', // 使用较小模型
     messages: [{ role: 'user', content: mergePrompt }],
     temperature: 0.1,
+    stream: true,
+    max_tokens: 4096,
   })
 
+  let mergedContent = ''
+  for await (const part of stream) {
+    const delta = part.choices[0]?.delta?.content || ''
+    if (delta) {
+      mergedContent += delta
+      onStream?.(delta)
+    }
+  }
+
   try {
-    const content = response.choices[0].message.content || '{}'
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    const jsonMatch = mergedContent.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0])
     }
@@ -539,7 +549,7 @@ export async function POST(request: Request) {
 
             // 合并context pools
             send('sumup', '') // 显示 Sum up! 框
-            const mergedPool = await mergeContextPools(contextPools)
+            const mergedPool = await mergeContextPools(contextPools, (delta) => send('sumupc', delta))
 
             // 格式化并发送最终prompt
             finalPrompt = formatContextPool(mergedPool, basePrompt)

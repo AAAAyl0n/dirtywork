@@ -212,6 +212,12 @@ export default function RefinePage() {
                     setSearchQuery(null)
                     setIsThinking(false)
                     setIsSumUp(true)
+                } else if (data.t === 'sumupc') {
+                    // Streamed summary content
+                    setDisplayedPrompt((prev) => prev + data.c)
+                    setSearchQuery(null)
+                    setIsThinking(false)
+                    setIsSumUp(true)
                 } else if (data.t === 's') {
                     // Update Status (e.g. "Processing chunk 1/5")
                     setStatus(data.c)
