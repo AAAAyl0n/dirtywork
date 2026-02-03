@@ -40,7 +40,7 @@ function ThinkingStatusBubble() {
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
       </div>
-      <span>Thinking... This may take about 1-5 minutes.</span>
+      <span>Thinking... This may take several minutes.</span>
     </motion.div>
   )
 }
@@ -392,7 +392,7 @@ export default function RefinePage() {
                         value={loading || isCompleted || canResume ? displayedPrompt : basePrompt}
                         onChange={(e) => !loading && setBasePrompt(e.target.value)}
                         readOnly={loading}
-                        placeholder={loading ? "Waiting for context analysis..." : "Enter custom instructions here (e.g. 'this conversion', 'Focus on medical terms')..."}
+                        placeholder={loading ? "Waiting for context analysis..." : "在此添加背景信息，例如一些人名、公司名、可能识别错误的名称等"}
                         className={
                             `w-full h-full resize-none rounded-lg border border-neutral-200 p-4 text-xs font-mono focus:outline-none dark:border-neutral-800 dark:text-neutral-100
                             ${loading ? 'bg-neutral-100 dark:bg-neutral-900 text-neutral-500' : 'bg-neutral-50 dark:bg-neutral-900 focus:border-neutral-400'}`

@@ -290,7 +290,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
 
 注意：
 1. 用户提供的是一个音频转文本的内容，可能包含较多听写错误，包含人名错误、公司名错误、语病，请注意纠正。
-2. 如果遇到不确定的专有名词、公司名称或技术术语，如果无法判断，必须使用搜索工具验证，并推测、确认名词是否正确。
+2. 如果遇到不确定的专有名词、公司名称或技术术语，必须使用搜索工具验证，并推测、确认名词是否正确。
 3. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。尽可能多的寻找和给出纠错。
 4. 返回纯JSON格式，不要有其他文字`
 
@@ -315,7 +315,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       temperature: 0.2,
       tools,
       tool_choice: 'auto',
-      max_tokens: 8192,
+      max_tokens: 32768,
     }, {
       signal: firstController.signal,
     })
@@ -334,62 +334,74 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
     tool_calls: assistantMessage.tool_calls,
   })
 
-  // 处理工具调用
+  // 处理工具调用（循环直到没有 tool_calls）
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-    const toolMessages: OpenAI.ChatCompletionMessageParam[] = []
+    let followupMessages: OpenAI.ChatCompletionMessageParam[] = [...messages]
+    let loopCount = 0
+    const maxLoops = 5
 
-    for (const toolCall of assistantMessage.tool_calls) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tc = toolCall as any
-      if (tc.function?.name === 'web_search') {
-        const args = JSON.parse(tc.function.arguments)
-        onSearch(args.query)
-        const searchResult = await handleWebSearch(args.query)
-        console.log('[Search] Query:', args.query)
-        console.log('[Search] Result:', searchResult)
-        onSearchDone() // 搜索完成，清除搜索框
-        toolMessages.push({
-          role: 'tool',
-          tool_call_id: tc.id,
-          content: searchResult,
+    while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+      if (loopCount >= maxLoops) {
+        console.warn('[Analyze] Max tool-call loops reached, stopping.')
+        break
+      }
+      loopCount += 1
+
+      const toolMessages: OpenAI.ChatCompletionMessageParam[] = []
+
+      for (const toolCall of assistantMessage.tool_calls) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tc = toolCall as any
+        if (tc.function?.name === 'web_search') {
+          const args = JSON.parse(tc.function.arguments)
+          onSearch(args.query)
+          const searchResult = await handleWebSearch(args.query)
+          console.log('[Search] Query:', args.query)
+          console.log('[Search] Result:', searchResult)
+          onSearchDone() // 搜索完成，清除搜索框
+          toolMessages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: searchResult,
+          })
+        }
+      }
+
+      // 再次请求获取结果（标准 tool-call 循环）
+      onThinking() // 开始分析，显示 Thinking 框
+      followupMessages = [
+        ...followupMessages,
+        assistantMessage,
+        ...toolMessages,
+      ]
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3600000) // 90秒超时
+
+      try {
+        const response2 = await modelClient.chat.completions.create({
+          model,
+          messages: followupMessages,
+          temperature: 0.2,
+          tools,
+          tool_choice: 'auto',
+          max_tokens: 32768,
+        }, {
+          signal: controller.signal,
         })
+        clearTimeout(timeoutId)
+        assistantMessage = response2.choices[0].message
+        console.log('[Analyze] Followup output:', {
+          content: assistantMessage.content,
+          tool_calls: assistantMessage.tool_calls,
+        })
+      } catch (error) {
+        clearTimeout(timeoutId)
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('[Gemini] Request timed out after 360s')
+        }
+        throw error
       }
-    }
-
-    // 再次请求获取最终结果（标准 tool-call 循环）
-    onThinking() // 开始分析，显示 Thinking 框
-    const followupMessages: OpenAI.ChatCompletionMessageParam[] = [
-      ...messages,
-      assistantMessage,
-      ...toolMessages,
-    ]
-
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3600000) // 90秒超时
-
-    try {
-      const response2 = await modelClient.chat.completions.create({
-        model,
-        messages: followupMessages,
-        temperature: 0.2,
-        tools,
-        tool_choice: 'auto',
-        max_tokens: 16384,
-      }, {
-        signal: controller.signal,
-      })
-      clearTimeout(timeoutId)
-      assistantMessage = response2.choices[0].message
-      console.log('[Analyze] Followup output:', {
-        content: assistantMessage.content,
-        tool_calls: assistantMessage.tool_calls,
-      })
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.error('[Gemini] Request timed out after 360s')
-      }
-      throw error
     }
   }
 
