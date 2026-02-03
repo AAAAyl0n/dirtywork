@@ -7,6 +7,13 @@ export const metadata = {
 
 const articles = [
   {
+    title: "Don't fall into the anti-AI hype",
+    url: 'https://antirez.com/news/158',
+    source: 'antirez.com',
+    author: 'antirez',
+    publishedAt: '2026-02-03',
+  },
+  {
     title: '为什么音乐的音调是离散频率，不能有连续频率变化的音乐吗？',
     url: 'https://www.zhihu.com/question/1998934565625041679/answer/1999790856752891418',
     source: '知乎',

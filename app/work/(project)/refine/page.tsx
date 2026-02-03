@@ -382,7 +382,7 @@ export default function RefinePage() {
             <h1 className="text-2xl font-medium tracking-tighter">Refine</h1>
         </div>
         <p className="prose prose-neutral text-sm dark:prose-invert">
-          Advanced text refinement tool. Analyzes context, fixes grammar/formatting, and improves clarity for long transcripts.
+          Advanced text refinement tool. Analyzes context, fixes grammar/formatting/personal name/company name, and improves clarity for long transcripts.
         </p>
       </div>
 
@@ -461,7 +461,10 @@ export default function RefinePage() {
                             }
                         }}
                         readOnly={promptReadOnly}
-                        placeholder={loading ? "Waiting for context analysis..." : "在此添加背景信息，例如一些人名、公司名、可能识别错误的名称等"}
+                        placeholder={loading
+                            ? "Waiting for context analysis..."
+                            : "在此添加背景信息（如人名、公司名、可能识别错误的名称等）\nAdd background info here, e.g., names, company names, or likely misrecognized entities"
+                        }
                         className={
                             `w-full h-full resize-none rounded-lg border border-neutral-200 p-4 text-xs font-mono focus:outline-none dark:border-neutral-800 dark:text-neutral-100
                             ${loading ? 'bg-neutral-100 dark:bg-neutral-900 text-neutral-500' : 'bg-neutral-50 dark:bg-neutral-900 focus:border-neutral-400'}`
