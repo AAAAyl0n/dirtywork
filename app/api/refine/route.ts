@@ -315,7 +315,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       temperature: 0.2,
       tools,
       tool_choice: 'auto',
-      max_tokens: 8192,
+      max_tokens: 16384,
     }, {
       signal: firstController.signal,
     })
