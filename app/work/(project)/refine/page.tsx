@@ -67,6 +67,8 @@ export default function RefinePage() {
   const [inputText, setInputText] = useState('')
   const [basePrompt, setBasePrompt] = useState('')
   const [displayedPrompt, setDisplayedPrompt] = useState('')
+  const [promptDraft, setPromptDraft] = useState('')
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false)
   const [refinedText, setRefinedText] = useState('')
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<string>('')
@@ -123,16 +125,19 @@ export default function RefinePage() {
 
     setLoading(true)
     setIsCompleted(false)
+    setIsEditingPrompt(false)
     setStatus(startIndex > 0 ? `Resuming from chunk ${startIndex + 1}...` : 'Analyzing Context...')
     
     // Only clear if starting fresh
     if (startIndex === 0) {
         setRefinedText('')
-        // Restart/fresh start: clear previous Live System Prompt immediately.
-        // (We still send `basePrompt` to the API; the new live prompt will stream back.)
-        setDisplayedPrompt('')
+        if (!skipAnalysis) {
+            // Restart/fresh start: clear previous Live System Prompt immediately.
+            // (We still send `basePrompt` to the API; the new live prompt will stream back.)
+            setDisplayedPrompt('')
+        }
         setCurrentChunkIndex(0)
-        setAnalysisDone(false)
+        setAnalysisDone(skipAnalysis)
         setSaveStatus('idle')
     }
     setAnalysisProgress({ done: 0, total: 0 })
@@ -188,6 +193,9 @@ export default function RefinePage() {
                 if (data.t === 'p') {
                     // Update Prompt
                     setDisplayedPrompt(data.c)
+                    if (!isEditingPrompt) {
+                        setPromptDraft(data.c)
+                    }
                     setAnalysisDone(true)
                     setSearchQuery(null)
                     setIsThinking(false)
@@ -220,6 +228,9 @@ export default function RefinePage() {
                 } else if (data.t === 'sumupc') {
                     // Streamed summary content
                     setDisplayedPrompt((prev) => prev + data.c)
+                    if (!isEditingPrompt) {
+                        setPromptDraft((prev) => prev + data.c)
+                    }
                     setSearchQuery(null)
                     setIsThinking(false)
                     setIsSumUp(true)
@@ -291,6 +302,26 @@ export default function RefinePage() {
       setStatus('Stopped')
   }
 
+  const handleEditPrompt = () => {
+      if (loading) {
+          handleStop()
+      }
+      setPromptDraft(displayedPrompt || '')
+      setIsEditingPrompt(true)
+  }
+
+  const handleCancelEditPrompt = () => {
+      setPromptDraft(displayedPrompt || '')
+      setIsEditingPrompt(false)
+  }
+
+  const handleConfirmEditPrompt = () => {
+      const nextPrompt = promptDraft.trim()
+      setDisplayedPrompt(nextPrompt)
+      setIsEditingPrompt(false)
+      runRefinement(0, true)
+  }
+
   const handleExport = () => {
     const blob = new Blob([refinedText], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -333,6 +364,10 @@ export default function RefinePage() {
   // Determine button state
   // Resume is available if not loading, not completed, and analysis is done (so we have a prompt to resume with)
   const canResume = !loading && !isCompleted && analysisDone;
+  const promptValue = isEditingPrompt
+      ? promptDraft
+      : (analysisDone || loading || canResume || isCompleted ? displayedPrompt : basePrompt)
+  const promptReadOnly = !isEditingPrompt && (loading || analysisDone || canResume || isCompleted)
 
   return (
     <section className="flex flex-col h-[calc(100vh-150px)] sm:px-14 sm:pt-6">
@@ -369,9 +404,35 @@ export default function RefinePage() {
             
             {/* Prompt Area */}
             <div className="h-1/3 flex flex-col min-h-0 relative">
-                 <label className="mb-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                    {loading ? 'Live System Prompt' : 'Base System Prompt (Optional)'}
-                </label>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                    <label className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                        {loading ? 'Live System Prompt' : (analysisDone ? 'Live System Prompt' : 'Base System Prompt (Optional)')}
+                    </label>
+                    {analysisDone && !isEditingPrompt && (
+                        <button
+                            onClick={handleEditPrompt}
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                        >
+                            编辑 Context
+                        </button>
+                    )}
+                    {analysisDone && isEditingPrompt && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleConfirmEditPrompt}
+                                className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                            >
+                                编辑完成
+                            </button>
+                            <button
+                                onClick={handleCancelEditPrompt}
+                                className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                            >
+                                取消
+                            </button>
+                        </div>
+                    )}
+                </div>
                 {loading && analysisProgress.total > 0 && !analysisDone && !isSumUp && (
                     <div className="mb-2">
                         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
@@ -389,9 +450,17 @@ export default function RefinePage() {
                 <div className="relative flex-1 min-h-0">
                     <textarea
                         ref={promptTextareaRef}
-                        value={loading || isCompleted || canResume ? displayedPrompt : basePrompt}
-                        onChange={(e) => !loading && setBasePrompt(e.target.value)}
-                        readOnly={loading}
+                        value={promptValue}
+                        onChange={(e) => {
+                            if (isEditingPrompt) {
+                                setPromptDraft(e.target.value)
+                                return
+                            }
+                            if (!loading && !analysisDone) {
+                                setBasePrompt(e.target.value)
+                            }
+                        }}
+                        readOnly={promptReadOnly}
                         placeholder={loading ? "Waiting for context analysis..." : "在此添加背景信息，例如一些人名、公司名、可能识别错误的名称等"}
                         className={
                             `w-full h-full resize-none rounded-lg border border-neutral-200 p-4 text-xs font-mono focus:outline-none dark:border-neutral-800 dark:text-neutral-100
@@ -413,6 +482,7 @@ export default function RefinePage() {
                         {canResume ? (
                              <button
                                 onClick={handleResume}
+                                disabled={isEditingPrompt}
                                 className="flex-1 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
                              >
                                 Resume
@@ -420,7 +490,7 @@ export default function RefinePage() {
                         ) : (
                              <button
                                 onClick={handleStart}
-                                disabled={!inputText.trim()}
+                                disabled={!inputText.trim() || isEditingPrompt}
                                 className="w-full sm:w-24 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
                              >
                                 Refine
@@ -430,6 +500,7 @@ export default function RefinePage() {
                         {(canResume || isCompleted) && (
                              <button
                                 onClick={handleStart}
+                                disabled={isEditingPrompt}
                                 title="Restart from beginning"
                                 className="w-auto px-4 rounded-lg bg-neutral-200 py-2 text-sm font-medium text-neutral-900 transition-colors hover:bg-neutral-300 dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700"
                              >
