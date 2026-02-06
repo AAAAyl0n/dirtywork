@@ -7,6 +7,13 @@ export const metadata = {
 
 const articles = [
   {
+    title: 'Building a C compiler with a team of parallel Claudes',
+    url: 'https://www.anthropic.com/engineering/building-c-compiler',
+    source: 'anthropic.com',
+    author: 'Nicholas Carlini',
+    publishedAt: '2026-02-05',
+  },
+  {
     title: "Don't fall into the anti-AI hype",
     url: 'https://antirez.com/news/158',
     source: 'antirez.com',
