@@ -172,6 +172,7 @@ export default function RefinePage() {
       if (!reader) throw new Error('No reader')
 
       let buffer = ''
+      let gotDoneSignal = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -258,6 +259,19 @@ export default function RefinePage() {
                         // Chunk index is 1-based in status string, so subtract 1.
                         setCurrentChunkIndex(parseInt(match[1]) - 1);
                     }
+                } else if (data.t === 'chunkdone') {
+                    // Chunk completed; resume should start from the next chunk.
+                    try {
+                        const { chunkIndex } = JSON.parse(data.c)
+                        if (typeof chunkIndex === 'number') {
+                            setCurrentChunkIndex(chunkIndex + 1)
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse chunkdone:', data.c, e)
+                    }
+                } else if (data.t === 'done') {
+                    // Server explicitly confirms all chunks were processed.
+                    gotDoneSignal = true
                 }
             } catch (e) {
                 console.warn('Failed to parse line (partial JSON?):', line, e)
@@ -267,8 +281,13 @@ export default function RefinePage() {
             }
         }
       }
-      setIsCompleted(true)
-      setStatus('Completed')
+      if (gotDoneSignal) {
+        setIsCompleted(true)
+        setStatus('Completed')
+      } else {
+        setIsCompleted(false)
+        setStatus((prev) => (prev && prev !== 'Stopped' ? `${prev} (Interrupted)` : 'Interrupted before completion'))
+      }
     } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
             setStatus('Stopped')

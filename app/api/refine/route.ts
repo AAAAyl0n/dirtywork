@@ -645,8 +645,13 @@ export async function POST(request: Request) {
             if (i < processChunks.length - 1) {
               send('c', '\n\n')
             }
+
+            // 明确告知前端该 chunk 已完整处理，便于断流时从下一个 chunk 续跑
+            send('chunkdone', JSON.stringify({ chunkIndex: i, totalChunks }))
           }
 
+          // 明确告知前端“所有 chunk 已处理完”
+          send('done', JSON.stringify({ totalChunks }))
           send('s', 'Completed')
           controller.close()
         } catch (error) {
