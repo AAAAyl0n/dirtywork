@@ -84,11 +84,6 @@ export default function RefinePage() {
   const analysisPercent = analysisProgress.total > 0
     ? Math.round((analysisProgress.done / analysisProgress.total) * 100)
     : 0
-  const isAnalyzingChunks =
-    loading &&
-    !analysisDone &&
-    analysisProgress.total > 0 &&
-    analysisProgress.done < analysisProgress.total
   
   const abortControllerRef = useRef<AbortController | null>(null)
   const outputTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -496,7 +491,7 @@ export default function RefinePage() {
                     />
                     <AnimatePresence mode="wait">
                         {searchQuery && <SearchStatusBubble query={searchQuery} />}
-                        {!searchQuery && !isSumUp && (isThinking || isAnalyzingChunks) && <ThinkingStatusBubble />}
+                        {!searchQuery && isThinking && <ThinkingStatusBubble />}
                         {!searchQuery && !isThinking && isSumUp && <SumUpStatusBubble />}
                     </AnimatePresence>
                 </div>

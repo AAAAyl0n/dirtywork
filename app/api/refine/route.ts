@@ -24,8 +24,8 @@ const geminiClient = new OpenAI({
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 const SEARCH_RESULT_MAX_CHARS = 1000
-const ANALYZE_TIMEOUT_MS = 180_000
-const MERGE_TIMEOUT_MS = 180_000
+const ANALYZE_TIMEOUT_MS = 90_000
+const MERGE_TIMEOUT_MS = 90_000
 const SEARCH_TIMEOUT_MS = 20_000
 const ANALYSIS_CONCURRENCY = 4
 
@@ -477,8 +477,8 @@ ${JSON.stringify(pools, null, 2)}
   let mergedContent = ''
 
   try {
-    const stream = await client.chat.completions.create({
-      model: 'gpt-4.1-2025-04-14', // 使用较小模型
+    const stream = await claudeClient.chat.completions.create({
+      model: 'claude-haiku-4-5-20251001',
       messages: [{ role: 'user', content: mergePrompt }],
       temperature: 0.1,
       stream: true,
@@ -665,8 +665,8 @@ export async function POST(request: Request) {
 
             const systemPrompt = `${finalPrompt}\n\n${REFINE_INSTRUCTION}`
 
-            const stream = await client.chat.completions.create({
-              model: 'gpt-4.1-2025-04-14',
+            const stream = await claudeClient.chat.completions.create({
+              model: 'claude-haiku-4-5-20251001',
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: chunk },
