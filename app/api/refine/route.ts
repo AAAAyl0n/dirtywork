@@ -24,6 +24,10 @@ const geminiClient = new OpenAI({
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 const SEARCH_RESULT_MAX_CHARS = 1000
+const ANALYZE_TIMEOUT_MS = 180_000
+const MERGE_TIMEOUT_MS = 180_000
+const SEARCH_TIMEOUT_MS = 20_000
+const ANALYSIS_CONCURRENCY = 4
 
 // 定义工具
 const tools: OpenAI.ChatCompletionTool[] = [
@@ -49,6 +53,8 @@ const tools: OpenAI.ChatCompletionTool[] = [
 // 联网搜索
 async function handleWebSearch(query: string): Promise<string> {
   console.log('[Search] Starting search for:', query)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS)
   try {
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
@@ -62,7 +68,9 @@ async function handleWebSearch(query: string): Promise<string> {
         include_answer: true,
         max_results: 5,
       }),
+      signal: controller.signal,
     })
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.error('[Search] Tavily API error:', response.status, response.statusText)
@@ -90,6 +98,11 @@ async function handleWebSearch(query: string): Promise<string> {
     
     return truncateSearchResult(result || `No meaningful results for: ${query}`)
   } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[Search] Request timed out')
+      return `Search timed out for query: ${query}`
+    }
     console.error('[Search] Error:', error)
     return `Search failed due to error: ${error instanceof Error ? error.message : 'Unknown error'}`
   }
@@ -303,7 +316,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   // 第一次请求，可能会调用工具
   // 添加超时控制
   const firstController = new AbortController()
-  const firstTimeoutId = setTimeout(() => firstController.abort(), 3600000) // 90秒超时
+  const firstTimeoutId = setTimeout(() => firstController.abort(), ANALYZE_TIMEOUT_MS) // 90秒超时
   
   const model = 'gemini-3-flash-preview-thinking'
   const modelClient = geminiClient
@@ -354,10 +367,19 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const tc = toolCall as any
         if (tc.function?.name === 'web_search') {
-          const args = JSON.parse(tc.function.arguments)
-          onSearch(args.query)
-          const searchResult = await handleWebSearch(args.query)
-          console.log('[Search] Query:', args.query)
+          let args: { query?: string } = {}
+          try {
+            args = JSON.parse(tc.function.arguments || '{}')
+          } catch (e) {
+            console.warn('[Search] Invalid tool arguments:', tc.function.arguments, e)
+          }
+          const query = (args.query || '').trim()
+          if (!query) {
+            continue
+          }
+          onSearch(query)
+          const searchResult = await handleWebSearch(query)
+          console.log('[Search] Query:', query)
           console.log('[Search] Result:', searchResult)
           onSearchDone() // 搜索完成，清除搜索框
           toolMessages.push({
@@ -377,7 +399,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       ]
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 3600000) // 90秒超时
+      const timeoutId = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS) // 90秒超时
 
       try {
         const response2 = await modelClient.chat.completions.create({
@@ -399,7 +421,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       } catch (error) {
         clearTimeout(timeoutId)
         if (error instanceof Error && error.name === 'AbortError') {
-          console.error('[Gemini] Request timed out after 360s')
+          console.error('[Gemini] Followup request timed out after 90s')
         }
         throw error
       }
@@ -443,29 +465,43 @@ ${JSON.stringify(pools, null, 2)}
 
 请输出合并后的单个JSON对象：`
 
-  const stream = await client.chat.completions.create({
-    model: 'gpt-4.1-2025-04-14', // 使用较小模型
-    messages: [{ role: 'user', content: mergePrompt }],
-    temperature: 0.1,
-    stream: true,
-  })
-
-  let mergedContent = ''
-  for await (const part of stream) {
-    const delta = part.choices[0]?.delta?.content || ''
-    if (delta) {
-      mergedContent += delta
-      //console.log('[Merge] Stream delta:', delta)
-      onStream?.(delta)
-    }
-  }
-
   const fallbackMerge = (): ContextPool => ({
     characters: pools.flatMap((p) => p.characters || []),
     terminology: pools.flatMap((p) => p.terminology || []),
     corrections: pools.flatMap((p) => p.corrections || []),
     notes: pools.flatMap((p) => p.notes || []),
   })
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), MERGE_TIMEOUT_MS)
+  let mergedContent = ''
+
+  try {
+    const stream = await client.chat.completions.create({
+      model: 'gpt-4.1-2025-04-14', // 使用较小模型
+      messages: [{ role: 'user', content: mergePrompt }],
+      temperature: 0.1,
+      stream: true,
+    }, {
+      signal: controller.signal,
+    })
+
+    for await (const part of stream) {
+      const delta = part.choices[0]?.delta?.content || ''
+      if (delta) {
+        mergedContent += delta
+        onStream?.(delta)
+      }
+    }
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      console.warn('[Merge] Merge timed out after 90s, using fallback merge')
+      return fallbackMerge()
+    }
+    throw e
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   try {
     console.log('[Merge] Raw merged content:', mergedContent)
@@ -581,7 +617,7 @@ export async function POST(request: Request) {
             const totalChunks = analysisChunks.length
             send('ap', JSON.stringify({ done: completedChunks, total: totalChunks }))
 
-            // 分批并发分析chunks（限制并发数为2，避免触发代理限制）
+            // 分批并发分析chunks（限制并发数，避免触发代理限制）
             const contextPoolTasks = analysisChunks.map((chunk, index) => () =>
               analyzeChunk(
                 chunk,
@@ -591,16 +627,22 @@ export async function POST(request: Request) {
                 (query) => send('search', query),
                 () => send('searchdone', ''),
                 () => send('thinking', '')
-              ).then((result) => {
-                completedChunks += 1
-                send('ap', JSON.stringify({ done: completedChunks, total: totalChunks }))
-                return result
-              })
+              )
+                .catch((error) => {
+                  console.error(`[Analyze] Chunk ${index + 1}/${analysisChunks.length} failed:`, error)
+                  return { characters: [], terminology: [], corrections: [] } satisfies ContextPool
+                })
+                .then((result) => {
+                  completedChunks += 1
+                  send('ap', JSON.stringify({ done: completedChunks, total: totalChunks }))
+                  return result
+                })
             )
 
-            const contextPools = await promiseAllWithConcurrency(contextPoolTasks, 8)
+            const contextPools = await promiseAllWithConcurrency(contextPoolTasks, ANALYSIS_CONCURRENCY)
 
             // 合并context pools
+            send('s', 'Merging context...')
             send('sumup', '') // 显示 Sum up! 框
             const mergedPool = await mergeContextPools(contextPools, (delta) => send('sumupc', delta))
 
