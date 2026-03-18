@@ -439,11 +439,8 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   return { characters: [], terminology: [], corrections: [] }
 }
 
-// 合并多个context pools
-async function mergeContextPools(
-  pools: ContextPool[],
-  onStream?: (delta: string) => void
-): Promise<ContextPool> {
+// 规则合并多个 context pools（不走 LLM JSON 合并）
+function fallbackMergeContextPools(pools: ContextPool[]): ContextPool {
   if (pools.length === 0) {
     return { characters: [], terminology: [], corrections: [] }
   }
@@ -452,34 +449,42 @@ async function mergeContextPools(
     return pools[0]
   }
 
-  const mergePrompt = `你是一个数据合并专家。请将以下多个JSON上下文信息合并为一个统一的JSON。
-
-要求：
-1. 合并相同的人物，保留最完整的描述，对于近似相同的人物你需要思考并去除重复
-2. 去重术语，合并相同术语的不同描述
-3. 合并纠错表，去除重复项，保留到最精简的状态。
-4. 输出纯JSON格式，一定要注意格式，要输出可解析的纯JSON
-
-待合并的JSON数组：
-${JSON.stringify(pools, null, 2)}
-
-请输出合并后的单个JSON对象：`
-
-  const fallbackMerge = (): ContextPool => ({
+  return {
     characters: pools.flatMap((p) => p.characters || []),
     terminology: pools.flatMap((p) => p.terminology || []),
     corrections: pools.flatMap((p) => p.corrections || []),
     notes: pools.flatMap((p) => p.notes || []),
-  })
+  }
+}
+
+// 对非 JSON 的上下文长文本做总结/去重（合并同人物、去除重复术语与纠错）
+async function summarizeContextText(
+  contextText: string,
+  onStream?: (delta: string) => void
+): Promise<string> {
+  if (!contextText.trim()) return contextText
+
+  const summarizePrompt = `你是一个“上下文信息整理”专家。请整理下面的上下文文本，输出更精简、去重后的版本。
+
+要求：
+1. 合并相同人物（同名、别名、明显指代同一人），保留最完整的一条
+2. 去重术语，若解释重复则保留更清晰版本；冲突时保留更可信/更完整版本
+3. 去重纠错表，保留最准确表达
+4. 保留原有大结构（如：人物、公司/组织、产品/服务、技术术语、其他术语、纠错表、备注）
+5. 输出纯文本，不要 JSON，不要 Markdown 代码块，不要额外说明
+6. 内容尽量精简，但不要丢失关键信息
+
+待整理文本：
+${contextText}`
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), MERGE_TIMEOUT_MS)
-  let mergedContent = ''
+  let summarizedContent = ''
 
   try {
-    const stream = await claudeClient.chat.completions.create({
-      model: 'claude-haiku-4-5-20251001',
-      messages: [{ role: 'user', content: mergePrompt }],
+    const stream = await geminiClient.chat.completions.create({
+      model: 'gemini-3.1-pro-preview',
+      messages: [{ role: 'user', content: summarizePrompt }],
       temperature: 0.1,
       stream: true,
     }, {
@@ -489,30 +494,26 @@ ${JSON.stringify(pools, null, 2)}
     for await (const part of stream) {
       const delta = part.choices[0]?.delta?.content || ''
       if (delta) {
-        mergedContent += delta
+        summarizedContent += delta
         onStream?.(delta)
       }
     }
+
+    const cleaned = summarizedContent.trim()
+    if (!cleaned) {
+      console.warn('[Summarize] Empty summarize output, fallback to original context text')
+      return contextText
+    }
+    return cleaned
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
-      console.warn('[Merge] Merge timed out after 90s, using fallback merge')
-      return fallbackMerge()
+      console.warn('[Summarize] Timed out after 90s, fallback to original context text')
+      return contextText
     }
-    throw e
+    console.error('[Summarize] Failed, fallback to original context text:', e)
+    return contextText
   } finally {
     clearTimeout(timeoutId)
-  }
-
-  try {
-    console.log('[Merge] Raw merged content:', mergedContent)
-    const parsed = parseJsonFromText<ContextPool>(mergedContent)
-    if (parsed) return parsed
-    console.warn('[Merge] Parse failed, using fallback merge')
-    return fallbackMerge()
-  } catch (e) {
-    console.error('Failed to merge context pools:', e)
-    // fallback: 简单合并
-    return fallbackMerge()
   }
 }
 
@@ -585,11 +586,10 @@ const REFINE_INSTRUCTION = `这是投资人与公司/客户的音频转文字记
 2. 修正字词识别错误（利用上下文信息库中的纠错表）
 3. 修正专有名词拼写（利用上下文信息库中的术语表）
 4. 根据上下文推测并修正不清晰的部分
-5. 保持原文格式和说话人标记
+5. 务必保持原文格式和说话人标记
 6. 不要添加额外的解释或注释，只输出修正后的文本
 7. 去除或润色语气词较多或有口癖、重复的内容
-8. 说话人和时间请不要加粗，保持格式一致
-9. 直接输出内容！不要有多余的部分`
+8. 开头不要输出其他内容，直接输出修正后的文本`
 
 export async function POST(request: Request) {
   try {
@@ -643,13 +643,15 @@ export async function POST(request: Request) {
 
             const contextPools = await promiseAllWithConcurrency(contextPoolTasks, ANALYSIS_CONCURRENCY)
 
-            // 合并context pools
-            send('s', 'Merging context...')
+            // 先规则合并，再用 LLM 对长文本做 Summarizing 去重
+            send('s', 'Summarizing context...')
             send('sumup', '') // 显示 Sum up! 框
-            const mergedPool = await mergeContextPools(contextPools, (delta) => send('sumupc', delta))
+            const mergedPool = fallbackMergeContextPools(contextPools)
+            const rawContextText = formatContextPool(mergedPool, basePrompt)
+            const summarizedContextText = await summarizeContextText(rawContextText, (delta) => send('sumupc', delta))
 
             // 格式化并发送最终prompt
-            finalPrompt = formatContextPool(mergedPool, basePrompt)
+            finalPrompt = summarizedContextText
             send('p', finalPrompt)
           } else {
             // 跳过分析，使用传入的basePrompt
@@ -718,4 +720,3 @@ export async function POST(request: Request) {
     return Response.json({ success: false, error: '请求失败，请稍后重试' }, { status: 500 })
   }
 }
-
