@@ -78,6 +78,7 @@ export default function RefinePage() {
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [isThinking, setIsThinking] = useState(false)
   const [isSumUp, setIsSumUp] = useState(false)
+  const [isOutputScrollLocked, setIsOutputScrollLocked] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
@@ -101,10 +102,25 @@ export default function RefinePage() {
 
   // Auto-scroll to bottom when refined text changes
   useEffect(() => {
-    if (outputTextareaRef.current) {
+    if (!isOutputScrollLocked && outputTextareaRef.current) {
       outputTextareaRef.current.scrollTop = outputTextareaRef.current.scrollHeight
     }
-  }, [refinedText])
+  }, [refinedText, isOutputScrollLocked])
+
+  // While dragging in output textarea, pause auto-scroll. Resume on pointer release.
+  useEffect(() => {
+    if (!isOutputScrollLocked) return
+
+    const handlePointerUp = () => {
+      setIsOutputScrollLocked(false)
+      if (outputTextareaRef.current) {
+        outputTextareaRef.current.scrollTop = outputTextareaRef.current.scrollHeight
+      }
+    }
+
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => window.removeEventListener('pointerup', handlePointerUp)
+  }, [isOutputScrollLocked])
 
   // Auto-scroll to bottom when prompt changes
   useEffect(() => {
@@ -564,6 +580,11 @@ export default function RefinePage() {
                 <textarea
                     ref={outputTextareaRef}
                     value={refinedText}
+                    onPointerDown={() => {
+                      if (loading) {
+                        setIsOutputScrollLocked(true)
+                      }
+                    }}
                     readOnly
                     placeholder="Refined text will stream here..."
                     className="flex-1 w-full resize-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 mb-4"

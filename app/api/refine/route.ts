@@ -24,10 +24,10 @@ const geminiClient = new OpenAI({
 
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 const SEARCH_RESULT_MAX_CHARS = 1000
-const ANALYZE_TIMEOUT_MS = 90_000
-const MERGE_TIMEOUT_MS = 90_000
+const ANALYZE_TIMEOUT_MS = 180_000
+const MERGE_TIMEOUT_MS = 360_000
 const SEARCH_TIMEOUT_MS = 20_000
-const ANALYSIS_CONCURRENCY = 4
+const ANALYSIS_CONCURRENCY = 8
 
 // 定义工具
 const tools: OpenAI.ChatCompletionTool[] = [
@@ -298,15 +298,16 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   "corrections": [
     {"original": "原错误表达", "corrected": "正确表达", "reason": "原因（可选）"}
   ],
-  "notes": ["其他重要观察（可选）"]
+  "notes": ["其他重要观察（可选，尽量不写）"]
 }
 
 注意：
 1. 用户提供的是一个音频转文本的内容，可能包含较多听写错误，包含人名错误、公司名错误、语病，请注意纠正。
 2. 遇到不确定的专有名词、公司名称或技术术语，必须使用搜索工具验证，并推测、确认名词是否正确。
-3. 几个说话人提到的人名和公司名，必须使用搜索工具验证和深度思考判断，不允许自己猜测。
-3. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。尽可能多的寻找和给出纠错。
-4. 返回纯JSON格式，不要有其他文字`
+3. 几个说话人提到的人名和公司名，务必！！必须！！使用搜索工具验证和深度思考判断，不允许自己猜测。
+4. 纠错表中尽量只包含名词（人名、公司名、数据）的纠错，语言纠错会在后续步骤中修正。尽可能多的寻找和给出纠错。
+5. 返回纯JSON格式，不要有其他文字
+6. 严格规则：如果你对某个事实或名称的置信度低于90%，你必须先搜索再回答。`
 
   let messages: OpenAI.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
@@ -464,7 +465,7 @@ async function summarizeContextText(
 ): Promise<string> {
   if (!contextText.trim()) return contextText
 
-  const summarizePrompt = `你是一个“上下文信息整理”专家。请整理下面的上下文文本，输出更精简、去重后的版本。
+  const summarizePrompt = `你是一个“上下文信息整理”专家。请整理下面的上下文文本，输出去重后的版本。
 
 要求：
 1. 合并相同人物（同名、别名、明显指代同一人），保留最完整的一条
@@ -472,7 +473,6 @@ async function summarizeContextText(
 3. 去重纠错表，保留最准确表达
 4. 保留原有大结构（如：人物、公司/组织、产品/服务、技术术语、其他术语、纠错表、备注）
 5. 输出纯文本，不要 JSON，不要 Markdown 代码块，不要额外说明
-6. 内容尽量精简，但不要丢失关键信息
 
 待整理文本：
 ${contextText}`
