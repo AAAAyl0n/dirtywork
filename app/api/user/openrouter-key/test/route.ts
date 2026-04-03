@@ -88,7 +88,6 @@ function classifyError(error: unknown): {
 async function testModel(
   client: OpenAI,
   model: string,
-  label: string,
   stream = false
 ) {
   const controller = new AbortController()
@@ -104,7 +103,7 @@ async function testModel(
           messages: [
             {
               role: 'user',
-              content: `Return exactly this text and nothing else: ${label} OK`,
+              content: '8+9=?',
             },
           ],
           temperature: 0,
@@ -126,7 +125,7 @@ async function testModel(
           messages: [
             {
               role: 'user',
-              content: `Return exactly this text and nothing else: ${label} OK`,
+              content: '8+9=?',
             },
           ],
           temperature: 0,
@@ -191,9 +190,9 @@ export async function POST(request: Request) {
     const client = createOpenRouterClient(apiKey)
 
     const [analyze, summarize, refine] = await Promise.all([
-      testModel(client, modelConfig.analyzeModel, 'ANALYZE'),
-      testModel(client, modelConfig.summarizeModel, 'SUMMARIZE', true),
-      testModel(client, modelConfig.refineModel, 'REFINE'),
+      testModel(client, modelConfig.analyzeModel),
+      testModel(client, modelConfig.summarizeModel, true),
+      testModel(client, modelConfig.refineModel),
     ])
 
     const allPassed = analyze.ok && summarize.ok && refine.ok
