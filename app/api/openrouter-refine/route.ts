@@ -8,11 +8,11 @@ export const maxDuration = 300
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const OPENROUTER_ANALYZE_MODEL =
-  process.env.OPENROUTER_ANALYZE_MODEL || 'google/gemini-2.5-flash'
+  process.env.OPENROUTER_ANALYZE_MODEL || 'google/gemini-3-flash-preview'
 const OPENROUTER_SUMMARIZE_MODEL =
-  process.env.OPENROUTER_SUMMARIZE_MODEL || 'google/gemini-2.5-pro'
+  process.env.OPENROUTER_SUMMARIZE_MODEL || 'google/gemini-3.1-pro-preview'
 const OPENROUTER_REFINE_MODEL =
-  process.env.OPENROUTER_REFINE_MODEL || 'anthropic/claude-3.5-haiku'
+  process.env.OPENROUTER_REFINE_MODEL || 'anthropic/claude-haiku-4.5'
 const SEARCH_RESULT_MAX_CHARS = 1000
 const ANALYZE_TIMEOUT_MS = 180_000
 const MERGE_TIMEOUT_MS = 360_000
@@ -325,7 +325,11 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
         tools,
         tool_choice: 'auto',
         max_tokens: 16384,
-      },
+        reasoning: {
+          effort: 'high',
+          exclude: true,
+        },
+      } as any,
       {
         signal: firstController.signal,
       }
@@ -395,7 +399,11 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
             tools,
             tool_choice: 'auto',
             max_tokens: 16384,
-          },
+            reasoning: {
+              effort: 'high',
+              exclude: true,
+            },
+          } as any,
           {
             signal: controller.signal,
           }
@@ -461,17 +469,21 @@ ${contextText}`
   let summarizedContent = ''
 
   try {
-    const stream = await client.chat.completions.create(
+    const stream = (await client.chat.completions.create(
       {
         model: OPENROUTER_SUMMARIZE_MODEL,
         messages: [{ role: 'user', content: summarizePrompt }],
         temperature: 0.1,
         stream: true,
-      },
+        reasoning: {
+          effort: 'medium',
+          exclude: true,
+        },
+      } as any,
       {
         signal: controller.signal,
       }
-    )
+    )) as any
 
     for await (const part of stream) {
       const delta = part.choices[0]?.delta?.content || ''
