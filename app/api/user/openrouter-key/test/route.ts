@@ -31,29 +31,6 @@ function createOpenRouterClient(apiKey: string) {
   })
 }
 
-function extractTextFromPart(part: unknown): string {
-  if (typeof part === 'string') return part
-
-  if (!part || typeof part !== 'object') return ''
-
-  const candidate = part as Record<string, unknown>
-
-  if (typeof candidate.text === 'string') return candidate.text
-  if (typeof candidate.content === 'string') return candidate.content
-
-  return ''
-}
-
-function extractTextPayload(payload: unknown): string {
-  if (typeof payload === 'string') return payload
-
-  if (Array.isArray(payload)) {
-    return payload.map(extractTextFromPart).join('')
-  }
-
-  return extractTextFromPart(payload)
-}
-
 function classifyError(error: unknown): {
   category: TestCategory
   message: string
@@ -108,6 +85,58 @@ function classifyError(error: unknown): {
   }
 }
 
+function extractText(value: unknown): string {
+  if (!value) return ''
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(extractText).join('')
+  }
+
+  if (typeof value !== 'object') {
+    return ''
+  }
+
+  const record = value as Record<string, unknown>
+
+  if (typeof record.text === 'string') {
+    return record.text
+  }
+
+  if (typeof record.content === 'string') {
+    return record.content
+  }
+
+  if (Array.isArray(record.content)) {
+    return record.content.map(extractText).join('')
+  }
+
+  if (typeof record.output_text === 'string') {
+    return record.output_text
+  }
+
+  if (Array.isArray(record.output_text)) {
+    return record.output_text.map(extractText).join('')
+  }
+
+  if (typeof record.reasoning === 'string') {
+    return record.reasoning
+  }
+
+  if (Array.isArray(record.reasoning)) {
+    return record.reasoning.map(extractText).join('')
+  }
+
+  if (typeof record.delta === 'object' && record.delta) {
+    return extractText(record.delta)
+  }
+
+  return ''
+}
+
 async function testModel(
   client: OpenAI,
   model: string,
@@ -139,7 +168,7 @@ async function testModel(
       )) as any
 
       for await (const part of response) {
-        content += extractTextPayload(part.choices[0]?.delta?.content)
+        content += extractText(part.choices[0]?.delta)
       }
     } else {
       const response = await client.chat.completions.create(
@@ -159,7 +188,7 @@ async function testModel(
         }
       )
 
-      content = extractTextPayload(response.choices[0]?.message?.content).trim()
+      content = extractText(response.choices[0]?.message).trim()
     }
 
     return {
