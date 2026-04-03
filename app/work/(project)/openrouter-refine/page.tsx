@@ -988,6 +988,27 @@ export default function OpenRouterRefinePage() {
                     Key 会保存在你自己的 Supabase 数据里，仅服务端调用
                     OpenRouter 时使用。
                   </p>
+                  <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                    <a
+                      href="https://openrouter.ai/settings/keys"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-neutral-700 dark:hover:text-neutral-200"
+                    >
+                      获取 API key
+                    </a>
+                    <span className="px-2 text-neutral-300 dark:text-neutral-600">
+                      /
+                    </span>
+                    <a
+                      href="https://openrouter.ai/models"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-neutral-700 dark:hover:text-neutral-200"
+                    >
+                      模型广场
+                    </a>
+                  </p>
                 </div>
                 {hasOpenRouterKey && maskedOpenRouterKey && (
                   <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
