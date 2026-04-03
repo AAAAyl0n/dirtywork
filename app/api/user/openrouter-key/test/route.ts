@@ -23,29 +23,60 @@ function createOpenRouterClient(apiKey: string) {
   })
 }
 
-async function testModel(client: OpenAI, model: string, label: string) {
+async function testModel(
+  client: OpenAI,
+  model: string,
+  label: string,
+  stream = false
+) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const response = await client.chat.completions.create(
-      {
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: `Return exactly this text and nothing else: ${label} OK`,
-          },
-        ],
-        temperature: 0,
-        max_tokens: 32,
-      },
-      {
-        signal: controller.signal,
-      }
-    )
+    let content = ''
 
-    const content = response.choices[0]?.message?.content?.trim() || ''
+    if (stream) {
+      const response = (await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: `Return exactly this text and nothing else: ${label} OK`,
+            },
+          ],
+          temperature: 0,
+          max_tokens: 32,
+          stream: true,
+        },
+        {
+          signal: controller.signal,
+        }
+      )) as any
+
+      for await (const part of response) {
+        content += part.choices[0]?.delta?.content || ''
+      }
+    } else {
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: `Return exactly this text and nothing else: ${label} OK`,
+            },
+          ],
+          temperature: 0,
+          max_tokens: 32,
+        },
+        {
+          signal: controller.signal,
+        }
+      )
+
+      content = response.choices[0]?.message?.content?.trim() || ''
+    }
 
     return {
       ok: !!content,
@@ -101,7 +132,7 @@ export async function POST(request: Request) {
 
     const [analyze, summarize, refine] = await Promise.all([
       testModel(client, modelConfig.analyzeModel, 'ANALYZE'),
-      testModel(client, modelConfig.summarizeModel, 'SUMMARIZE'),
+      testModel(client, modelConfig.summarizeModel, 'SUMMARIZE', true),
       testModel(client, modelConfig.refineModel, 'REFINE'),
     ])
 
