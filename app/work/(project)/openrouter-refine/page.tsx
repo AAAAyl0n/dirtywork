@@ -13,6 +13,13 @@ import {
 
 type ModelTestResult = {
   ok: boolean
+  category:
+    | 'ok'
+    | 'timeout'
+    | 'model_not_found'
+    | 'auth_failed'
+    | 'empty_response'
+    | 'other_error'
   message: string
   configured: string
   default: string
@@ -109,6 +116,23 @@ function SumUpStatusBubble() {
 }
 
 export default function OpenRouterRefinePage() {
+  const getModelTestStatusLabel = (category: ModelTestResult['category']) => {
+    switch (category) {
+      case 'ok':
+        return 'OK'
+      case 'timeout':
+        return '超时'
+      case 'model_not_found':
+        return '模型不存在'
+      case 'auth_failed':
+        return '认证失败'
+      case 'empty_response':
+        return '响应为空'
+      default:
+        return '错误'
+    }
+  }
+
   const [inputText, setInputText] = useState('')
   const [basePrompt, setBasePrompt] = useState('')
   const [displayedPrompt, setDisplayedPrompt] = useState('')
@@ -1161,7 +1185,7 @@ export default function OpenRouterRefinePage() {
                                 : 'text-red-500'
                             }`}
                           >
-                            {result.ok ? 'OK' : 'Failed'}
+                            {getModelTestStatusLabel(result.category)}
                           </span>
                         </div>
                         <p className="mt-1 break-all font-mono text-[11px] text-neutral-500 dark:text-neutral-400">

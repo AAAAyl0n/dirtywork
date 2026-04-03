@@ -11,6 +11,14 @@ import {
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const REQUEST_TIMEOUT_MS = 45_000
 
+type TestCategory =
+  | 'ok'
+  | 'timeout'
+  | 'model_not_found'
+  | 'auth_failed'
+  | 'empty_response'
+  | 'other_error'
+
 function createOpenRouterClient(apiKey: string) {
   return new OpenAI({
     apiKey,
@@ -21,6 +29,60 @@ function createOpenRouterClient(apiKey: string) {
       'X-Title': 'Dirtywork OpenRouter Model Test',
     },
   })
+}
+
+function classifyError(error: unknown): {
+  category: TestCategory
+  message: string
+} {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return {
+      category: 'timeout',
+      message: '超时',
+    }
+  }
+
+  const maybeError = error as any
+  const status = maybeError?.status
+  const code = maybeError?.code
+  const message =
+    typeof maybeError?.message === 'string'
+      ? maybeError.message
+      : 'Unknown error'
+  const normalizedMessage = message.toLowerCase()
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    code === 'invalid_api_key' ||
+    normalizedMessage.includes('invalid api key') ||
+    normalizedMessage.includes('unauthorized') ||
+    normalizedMessage.includes('authentication') ||
+    normalizedMessage.includes('auth')
+  ) {
+    return {
+      category: 'auth_failed',
+      message: '认证失败',
+    }
+  }
+
+  if (
+    status === 404 ||
+    code === 'model_not_found' ||
+    normalizedMessage.includes('model not found') ||
+    normalizedMessage.includes('no such model') ||
+    normalizedMessage.includes('unknown model')
+  ) {
+    return {
+      category: 'model_not_found',
+      message: '模型不存在',
+    }
+  }
+
+  return {
+    category: 'other_error',
+    message,
+  }
 }
 
 async function testModel(
@@ -80,17 +142,15 @@ async function testModel(
 
     return {
       ok: !!content,
-      message: content || 'No content returned',
+      category: content ? 'ok' : 'empty_response',
+      message: content || '响应为空但请求成功',
     }
   } catch (error) {
+    const classified = classifyError(error)
     return {
       ok: false,
-      message:
-        error instanceof Error && error.name === 'AbortError'
-          ? 'Request timed out'
-          : error instanceof Error
-            ? error.message
-            : 'Unknown error',
+      category: classified.category,
+      message: classified.message,
     }
   } finally {
     clearTimeout(timeoutId)
