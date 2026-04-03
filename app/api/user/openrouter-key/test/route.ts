@@ -191,7 +191,7 @@ export async function POST(request: Request) {
 
     const [analyze, summarize, refine] = await Promise.all([
       testModel(client, modelConfig.analyzeModel),
-      testModel(client, modelConfig.summarizeModel, true),
+      testModel(client, modelConfig.summarizeModel),
       testModel(client, modelConfig.refineModel),
     ])
 
