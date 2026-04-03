@@ -10,6 +10,7 @@ import {
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const REQUEST_TIMEOUT_MS = 45_000
+const TEST_PROMPT = '直接回答 42。简答，禁止展开，禁止解释，优先低延迟，只输出最终答案。问题：21+21=?'
 
 type TestCategory =
   | 'ok'
@@ -155,7 +156,7 @@ async function testModel(
           messages: [
             {
               role: 'user',
-              content: '8+9=?',
+              content: TEST_PROMPT,
             },
           ],
           temperature: 0,
@@ -177,7 +178,7 @@ async function testModel(
           messages: [
             {
               role: 'user',
-              content: '8+9=?',
+              content: TEST_PROMPT,
             },
           ],
           temperature: 0,
