@@ -561,7 +561,7 @@ export default function OpenRouterRefinePage() {
               <ArrowLeftIcon className="h-5 w-5" />
             </Link>
             <h1 className="text-2xl font-medium tracking-tighter">
-              OpenRouter Refine
+              Refine
             </h1>
           </div>
           <button
@@ -706,7 +706,7 @@ export default function OpenRouterRefinePage() {
                     disabled={!canRun}
                     className="w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:opacity-50 sm:w-36 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
                   >
-                    OpenRouter Refine
+                    Refine
                   </button>
                 )}
 
