@@ -50,9 +50,20 @@ CREATE POLICY "Users can delete own history"
 CREATE TABLE user_api_keys (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   openrouter_api_key TEXT NOT NULL,
+  openrouter_analyze_model TEXT,
+  openrouter_summarize_model TEXT,
+  openrouter_refine_model TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 如果表已经存在，可单独执行下面三句补列
+ALTER TABLE user_api_keys
+  ADD COLUMN IF NOT EXISTS openrouter_analyze_model TEXT;
+ALTER TABLE user_api_keys
+  ADD COLUMN IF NOT EXISTS openrouter_summarize_model TEXT;
+ALTER TABLE user_api_keys
+  ADD COLUMN IF NOT EXISTS openrouter_refine_model TEXT;
 
 ALTER TABLE user_api_keys ENABLE ROW LEVEL SECURITY;
 

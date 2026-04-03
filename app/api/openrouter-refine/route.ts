@@ -1,5 +1,10 @@
 import OpenAI from 'openai'
 import { getAuthedUserOpenRouterApiKey } from '@/lib/user-api-keys'
+import {
+  DEFAULT_OPENROUTER_ANALYZE_MODEL,
+  DEFAULT_OPENROUTER_REFINE_MODEL,
+  DEFAULT_OPENROUTER_SUMMARIZE_MODEL,
+} from '@/lib/openrouter-models'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -8,11 +13,11 @@ export const maxDuration = 300
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 const OPENROUTER_ANALYZE_MODEL =
-  process.env.OPENROUTER_ANALYZE_MODEL || 'google/gemini-3-flash-preview'
+  process.env.OPENROUTER_ANALYZE_MODEL || DEFAULT_OPENROUTER_ANALYZE_MODEL
 const OPENROUTER_SUMMARIZE_MODEL =
-  process.env.OPENROUTER_SUMMARIZE_MODEL || 'google/gemini-3.1-pro-preview'
+  process.env.OPENROUTER_SUMMARIZE_MODEL || DEFAULT_OPENROUTER_SUMMARIZE_MODEL
 const OPENROUTER_REFINE_MODEL =
-  process.env.OPENROUTER_REFINE_MODEL || 'anthropic/claude-haiku-4.5'
+  process.env.OPENROUTER_REFINE_MODEL || DEFAULT_OPENROUTER_REFINE_MODEL
 const SEARCH_RESULT_MAX_CHARS = 1000
 const ANALYZE_TIMEOUT_MS = 180_000
 const MERGE_TIMEOUT_MS = 360_000
@@ -270,7 +275,8 @@ async function analyzeChunk(
   basePrompt: string,
   onSearch: (query: string) => void,
   onSearchDone: () => void,
-  onThinking: () => void
+  onThinking: () => void,
+  model: string
 ): Promise<ContextPool> {
   if (!chunk || chunk.trim().length === 0) {
     return { characters: [], terminology: [], corrections: [] }
@@ -319,7 +325,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
   try {
     response = await client.chat.completions.create(
       {
-        model: OPENROUTER_ANALYZE_MODEL,
+        model,
         messages,
         temperature: 0.2,
         tools,
@@ -393,7 +399,7 @@ ${basePrompt ? `用户提供的背景信息：\n${basePrompt}\n` : ''}
       try {
         const response2 = await client.chat.completions.create(
           {
-            model: OPENROUTER_ANALYZE_MODEL,
+            model,
             messages: followupMessages,
             temperature: 0.2,
             tools,
@@ -448,7 +454,8 @@ function fallbackMergeContextPools(pools: ContextPool[]): ContextPool {
 async function summarizeContextText(
   client: OpenAI,
   contextText: string,
-  onStream?: (delta: string) => void
+  onStream?: (delta: string) => void,
+  model = OPENROUTER_SUMMARIZE_MODEL
 ) {
   if (!contextText.trim()) return contextText
 
@@ -471,7 +478,7 @@ ${contextText}`
   try {
     const stream = (await client.chat.completions.create(
       {
-        model: OPENROUTER_SUMMARIZE_MODEL,
+        model,
         messages: [{ role: 'user', content: summarizePrompt }],
         temperature: 0.1,
         stream: true,
@@ -589,6 +596,10 @@ export async function POST(request: Request) {
     }
 
     const client = createOpenRouterClient(keyResult.apiKey)
+    const analyzeModel = keyResult.analyzeModel || OPENROUTER_ANALYZE_MODEL
+    const summarizeModel =
+      keyResult.summarizeModel || OPENROUTER_SUMMARIZE_MODEL
+    const refineModel = keyResult.refineModel || OPENROUTER_REFINE_MODEL
     const {
       text,
       basePrompt,
@@ -634,7 +645,8 @@ export async function POST(request: Request) {
                   basePrompt,
                   (query) => send('search', query),
                   () => send('searchdone', ''),
-                  () => send('thinking', '')
+                  () => send('thinking', ''),
+                  analyzeModel
                 )
                   .catch((error) => {
                     console.error(
@@ -672,7 +684,8 @@ export async function POST(request: Request) {
             const summarizedContextText = await summarizeContextText(
               client,
               rawContextText,
-              (delta) => send('sumupc', delta)
+              (delta) => send('sumupc', delta),
+              summarizeModel
             )
 
             finalPrompt = summarizedContextText
@@ -690,7 +703,7 @@ export async function POST(request: Request) {
             send('s', `Processing chunk ${i + 1}/${totalChunks}`)
 
             const stream = await client.chat.completions.create({
-              model: OPENROUTER_REFINE_MODEL,
+              model: refineModel,
               messages: [
                 {
                   role: 'system',

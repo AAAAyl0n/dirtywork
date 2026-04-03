@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { resolveOpenRouterModelConfig } from '@/lib/openrouter-models'
 
 export function maskApiKey(apiKey: string) {
   if (apiKey.length <= 8) {
@@ -24,7 +25,9 @@ export async function getAuthedUserOpenRouterApiKey() {
 
   const { data, error } = await supabase
     .from('user_api_keys')
-    .select('openrouter_api_key')
+    .select(
+      'openrouter_api_key, openrouter_analyze_model, openrouter_summarize_model, openrouter_refine_model'
+    )
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -46,5 +49,10 @@ export async function getAuthedUserOpenRouterApiKey() {
   return {
     apiKey: data.openrouter_api_key,
     userId: user.id,
+    ...resolveOpenRouterModelConfig({
+      analyzeModel: data.openrouter_analyze_model,
+      summarizeModel: data.openrouter_summarize_model,
+      refineModel: data.openrouter_refine_model,
+    }),
   }
 }

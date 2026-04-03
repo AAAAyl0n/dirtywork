@@ -5,6 +5,24 @@ import Link from 'next/link'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
+import {
+  DEFAULT_OPENROUTER_ANALYZE_MODEL,
+  DEFAULT_OPENROUTER_REFINE_MODEL,
+  DEFAULT_OPENROUTER_SUMMARIZE_MODEL,
+} from '@/lib/openrouter-models'
+
+type ModelTestResult = {
+  ok: boolean
+  message: string
+  configured: string
+  default: string
+}
+
+type ModelTestState = {
+  analyze: ModelTestResult | null
+  summarize: ModelTestResult | null
+  refine: ModelTestResult | null
+}
 
 function SearchStatusBubble({ query }: { query: string }) {
   return (
@@ -116,9 +134,21 @@ export default function OpenRouterRefinePage() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false)
   const [openRouterKeyInput, setOpenRouterKeyInput] = useState('')
+  const [analyzeModelInput, setAnalyzeModelInput] = useState('')
+  const [summarizeModelInput, setSummarizeModelInput] = useState('')
+  const [refineModelInput, setRefineModelInput] = useState('')
   const [openRouterKeyStatus, setOpenRouterKeyStatus] = useState<
     'idle' | 'saving' | 'saved' | 'deleting' | 'error'
   >('idle')
+  const [modelTestStatus, setModelTestStatus] = useState<
+    'idle' | 'testing' | 'passed' | 'failed'
+  >('idle')
+  const [modelTestMessage, setModelTestMessage] = useState('')
+  const [modelTestResults, setModelTestResults] = useState<ModelTestState>({
+    analyze: null,
+    summarize: null,
+    refine: null,
+  })
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false)
   const [maskedOpenRouterKey, setMaskedOpenRouterKey] = useState<string | null>(
     null
@@ -193,7 +223,17 @@ export default function OpenRouterRefinePage() {
       if (response.ok) {
         setHasOpenRouterKey(!!result.hasKey)
         setMaskedOpenRouterKey(result.maskedKey)
+        setAnalyzeModelInput(result.analyzeModel || '')
+        setSummarizeModelInput(result.summarizeModel || '')
+        setRefineModelInput(result.refineModel || '')
         setOpenRouterKeyMessage(result.hasKey ? '已保存 OpenRouter key' : '')
+        setModelTestStatus('idle')
+        setModelTestMessage('')
+        setModelTestResults({
+          analyze: null,
+          summarize: null,
+          refine: null,
+        })
         if (!result.hasKey) {
           setOpenRouterKeyInput('')
         }
@@ -213,7 +253,7 @@ export default function OpenRouterRefinePage() {
       return false
     }
 
-    if (!openRouterKeyInput.trim()) {
+    if (!openRouterKeyInput.trim() && !hasOpenRouterKey) {
       setOpenRouterKeyStatus('error')
       setOpenRouterKeyMessage('请输入 OpenRouter key')
       return false
@@ -226,7 +266,12 @@ export default function OpenRouterRefinePage() {
       const response = await fetch('/api/user/openrouter-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: openRouterKeyInput.trim() }),
+        body: JSON.stringify({
+          apiKey: openRouterKeyInput.trim(),
+          analyzeModel: analyzeModelInput.trim(),
+          summarizeModel: summarizeModelInput.trim(),
+          refineModel: refineModelInput.trim(),
+        }),
       })
       const result = await response.json()
 
@@ -239,8 +284,13 @@ export default function OpenRouterRefinePage() {
       setOpenRouterKeyStatus('saved')
       setHasOpenRouterKey(true)
       setMaskedOpenRouterKey(result.maskedKey)
+      setAnalyzeModelInput(result.analyzeModel || '')
+      setSummarizeModelInput(result.summarizeModel || '')
+      setRefineModelInput(result.refineModel || '')
       setOpenRouterKeyInput('')
       setOpenRouterKeyMessage('OpenRouter key 已保存')
+      setModelTestStatus('idle')
+      setModelTestMessage('')
       setIsKeyModalOpen(false)
       return true
     } catch (error) {
@@ -273,11 +323,77 @@ export default function OpenRouterRefinePage() {
       setHasOpenRouterKey(false)
       setMaskedOpenRouterKey(null)
       setOpenRouterKeyInput('')
+      setAnalyzeModelInput('')
+      setSummarizeModelInput('')
+      setRefineModelInput('')
       setOpenRouterKeyMessage('已删除 OpenRouter key')
+      setModelTestStatus('idle')
+      setModelTestMessage('')
+      setModelTestResults({
+        analyze: null,
+        summarize: null,
+        refine: null,
+      })
     } catch (error) {
       console.error('Failed to delete OpenRouter key:', error)
       setOpenRouterKeyStatus('error')
       setOpenRouterKeyMessage('删除 OpenRouter key 失败')
+    }
+  }
+
+  const testOpenRouterModels = async () => {
+    if (!isLoggedIn) {
+      setModelTestStatus('failed')
+      setModelTestMessage('请先登录')
+      return
+    }
+
+    if (!hasOpenRouterKey && !openRouterKeyInput.trim()) {
+      setModelTestStatus('failed')
+      setModelTestMessage('请先输入或保存 OpenRouter key')
+      return
+    }
+
+    setModelTestStatus('testing')
+    setModelTestMessage('')
+    setModelTestResults({
+      analyze: null,
+      summarize: null,
+      refine: null,
+    })
+
+    try {
+      const response = await fetch('/api/user/openrouter-key/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: openRouterKeyInput.trim(),
+          analyzeModel: analyzeModelInput.trim(),
+          summarizeModel: summarizeModelInput.trim(),
+          refineModel: refineModelInput.trim(),
+        }),
+      })
+
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(result?.error || '模型测试失败')
+      }
+
+      setModelTestResults(result.models)
+      if (result.success) {
+        setModelTestStatus('passed')
+        setModelTestMessage('三个模型都已成功响应')
+      } else {
+        setModelTestStatus('failed')
+        setModelTestMessage('部分模型未通过，请检查返回信息')
+      }
+    } catch (error) {
+      console.error('Failed to test OpenRouter models:', error)
+      setModelTestStatus('failed')
+      setModelTestMessage(
+        error instanceof Error ? error.message : '模型测试失败'
+      )
     }
   }
 
@@ -349,9 +465,90 @@ export default function OpenRouterRefinePage() {
       let buffer = ''
       let gotDoneSignal = false
 
+      const handleStreamLine = (line: string) => {
+        if (!line.trim()) return
+
+        try {
+          const data = JSON.parse(line)
+          if (data.t === 'p') {
+            setDisplayedPrompt(data.c)
+            if (!isEditingPrompt) {
+              setPromptDraft(data.c)
+            }
+            setAnalysisDone(true)
+            setSearchQuery(null)
+            setIsThinking(false)
+            setIsSumUp(false)
+          } else if (data.t === 'c') {
+            setRefinedText((prev) => prev + data.c)
+            setSearchQuery(null)
+            setIsThinking(false)
+            setIsSumUp(false)
+          } else if (data.t === 'search') {
+            setSearchQuery(data.c)
+            setIsThinking(false)
+            setIsSumUp(false)
+          } else if (data.t === 'searchdone') {
+            setSearchQuery(null)
+          } else if (data.t === 'thinking') {
+            setSearchQuery(null)
+            setIsThinking(true)
+            setIsSumUp(false)
+          } else if (data.t === 'sumup') {
+            setSearchQuery(null)
+            setIsThinking(false)
+            setIsSumUp(true)
+          } else if (data.t === 'sumupc') {
+            setDisplayedPrompt((prev) => prev + data.c)
+            if (!isEditingPrompt) {
+              setPromptDraft((prev) => prev + data.c)
+            }
+            setSearchQuery(null)
+            setIsThinking(false)
+            setIsSumUp(true)
+          } else if (data.t === 'ap') {
+            try {
+              const { done, total } = JSON.parse(data.c)
+              setAnalysisProgress({ done, total })
+            } catch (error) {
+              console.warn('Failed to parse analysis progress:', error)
+            }
+          } else if (data.t === 's') {
+            setStatus(data.c)
+            setSearchQuery(null)
+            setIsThinking(false)
+            setIsSumUp(false)
+            const match = data.c.match(/Processing chunk (\d+)\/(\d+)/)
+            if (match) {
+              setCurrentChunkIndex(parseInt(match[1]) - 1)
+            }
+          } else if (data.t === 'chunkdone') {
+            try {
+              const { chunkIndex } = JSON.parse(data.c)
+              if (typeof chunkIndex === 'number') {
+                setCurrentChunkIndex(chunkIndex + 1)
+              }
+            } catch (error) {
+              console.warn('Failed to parse chunkdone:', error)
+            }
+          } else if (data.t === 'done') {
+            gotDoneSignal = true
+          }
+        } catch (error) {
+          console.warn('Failed to parse stream line:', error)
+          if (!line.startsWith('{')) {
+            setRefinedText((prev) => prev + line + '\n')
+          }
+        }
+      }
+
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+
+        if (done) {
+          buffer += decoder.decode()
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
 
@@ -359,82 +556,12 @@ export default function OpenRouterRefinePage() {
         while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
           const line = buffer.slice(0, newlineIndex)
           buffer = buffer.slice(newlineIndex + 1)
-
-          if (!line.trim()) continue
-
-          try {
-            const data = JSON.parse(line)
-            if (data.t === 'p') {
-              setDisplayedPrompt(data.c)
-              if (!isEditingPrompt) {
-                setPromptDraft(data.c)
-              }
-              setAnalysisDone(true)
-              setSearchQuery(null)
-              setIsThinking(false)
-              setIsSumUp(false)
-            } else if (data.t === 'c') {
-              setRefinedText((prev) => prev + data.c)
-              setSearchQuery(null)
-              setIsThinking(false)
-              setIsSumUp(false)
-            } else if (data.t === 'search') {
-              setSearchQuery(data.c)
-              setIsThinking(false)
-              setIsSumUp(false)
-            } else if (data.t === 'searchdone') {
-              setSearchQuery(null)
-            } else if (data.t === 'thinking') {
-              setSearchQuery(null)
-              setIsThinking(true)
-              setIsSumUp(false)
-            } else if (data.t === 'sumup') {
-              setSearchQuery(null)
-              setIsThinking(false)
-              setIsSumUp(true)
-            } else if (data.t === 'sumupc') {
-              setDisplayedPrompt((prev) => prev + data.c)
-              if (!isEditingPrompt) {
-                setPromptDraft((prev) => prev + data.c)
-              }
-              setSearchQuery(null)
-              setIsThinking(false)
-              setIsSumUp(true)
-            } else if (data.t === 'ap') {
-              try {
-                const { done, total } = JSON.parse(data.c)
-                setAnalysisProgress({ done, total })
-              } catch (error) {
-                console.warn('Failed to parse analysis progress:', error)
-              }
-            } else if (data.t === 's') {
-              setStatus(data.c)
-              setSearchQuery(null)
-              setIsThinking(false)
-              setIsSumUp(false)
-              const match = data.c.match(/Processing chunk (\d+)\/(\d+)/)
-              if (match) {
-                setCurrentChunkIndex(parseInt(match[1]) - 1)
-              }
-            } else if (data.t === 'chunkdone') {
-              try {
-                const { chunkIndex } = JSON.parse(data.c)
-                if (typeof chunkIndex === 'number') {
-                  setCurrentChunkIndex(chunkIndex + 1)
-                }
-              } catch (error) {
-                console.warn('Failed to parse chunkdone:', error)
-              }
-            } else if (data.t === 'done') {
-              gotDoneSignal = true
-            }
-          } catch (error) {
-            console.warn('Failed to parse stream line:', error)
-            if (!line.startsWith('{')) {
-              setRefinedText((prev) => prev + line + '\n')
-            }
-          }
+          handleStreamLine(line)
         }
+      }
+
+      if (buffer.trim()) {
+        handleStreamLine(buffer)
       }
 
       if (gotDoneSignal) {
@@ -539,6 +666,14 @@ export default function OpenRouterRefinePage() {
   }
 
   const canResume = !loading && !isCompleted && analysisDone
+  const modelResultItems: Array<{
+    label: string
+    result: ModelTestResult | null
+  }> = [
+    { label: 'Analyze', result: modelTestResults.analyze },
+    { label: 'Summarize', result: modelTestResults.summarize },
+    { label: 'Refine', result: modelTestResults.refine },
+  ]
   const promptValue = isEditingPrompt
     ? promptDraft
     : analysisDone || loading || canResume || isCompleted
@@ -568,6 +703,13 @@ export default function OpenRouterRefinePage() {
             onClick={() => {
               setOpenRouterKeyStatus('idle')
               setOpenRouterKeyMessage('')
+              setModelTestStatus('idle')
+              setModelTestMessage('')
+              setModelTestResults({
+                analyze: null,
+                summarize: null,
+                refine: null,
+              })
               setIsKeyModalOpen(true)
             }}
             className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
@@ -862,6 +1004,15 @@ export default function OpenRouterRefinePage() {
                   if (openRouterKeyStatus !== 'idle') {
                     setOpenRouterKeyStatus('idle')
                   }
+                  if (modelTestStatus !== 'idle') {
+                    setModelTestStatus('idle')
+                    setModelTestMessage('')
+                    setModelTestResults({
+                      analyze: null,
+                      summarize: null,
+                      refine: null,
+                    })
+                  }
                 }}
                 placeholder={
                   hasOpenRouterKey
@@ -871,16 +1022,137 @@ export default function OpenRouterRefinePage() {
                 className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-400 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
               />
 
-              {openRouterKeyMessage && (
-                <p
-                  className={`mt-2 text-xs ${
-                    openRouterKeyStatus === 'error'
-                      ? 'text-red-500'
-                      : 'text-neutral-500 dark:text-neutral-400'
-                  }`}
-                >
-                  {openRouterKeyMessage}
-                </p>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                    Analyze Model
+                  </label>
+                  <input
+                    type="text"
+                    value={analyzeModelInput}
+                    onChange={(e) => {
+                      setAnalyzeModelInput(e.target.value)
+                      setModelTestStatus('idle')
+                      setModelTestMessage('')
+                      setModelTestResults({
+                        analyze: null,
+                        summarize: null,
+                        refine: null,
+                      })
+                    }}
+                    placeholder={DEFAULT_OPENROUTER_ANALYZE_MODEL}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                    Summarize Model
+                  </label>
+                  <input
+                    type="text"
+                    value={summarizeModelInput}
+                    onChange={(e) => {
+                      setSummarizeModelInput(e.target.value)
+                      setModelTestStatus('idle')
+                      setModelTestMessage('')
+                      setModelTestResults({
+                        analyze: null,
+                        summarize: null,
+                        refine: null,
+                      })
+                    }}
+                    placeholder={DEFAULT_OPENROUTER_SUMMARIZE_MODEL}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                    Refine Model
+                  </label>
+                  <input
+                    type="text"
+                    value={refineModelInput}
+                    onChange={(e) => {
+                      setRefineModelInput(e.target.value)
+                      setModelTestStatus('idle')
+                      setModelTestMessage('')
+                      setModelTestResults({
+                        analyze: null,
+                        summarize: null,
+                        refine: null,
+                      })
+                    }}
+                    placeholder={DEFAULT_OPENROUTER_REFINE_MODEL}
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:placeholder:text-neutral-500"
+                  />
+                </div>
+              </div>
+
+              {(openRouterKeyMessage || modelTestMessage) && (
+                <div className="mt-2 space-y-1">
+                  {openRouterKeyMessage && (
+                    <p
+                      className={`text-xs ${
+                        openRouterKeyStatus === 'error'
+                          ? 'text-red-500'
+                          : 'text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {openRouterKeyMessage}
+                    </p>
+                  )}
+                  {modelTestMessage && (
+                    <p
+                      className={`text-xs ${
+                        modelTestStatus === 'failed'
+                          ? 'text-red-500'
+                          : modelTestStatus === 'passed'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {modelTestMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {(modelTestResults.analyze ||
+                modelTestResults.summarize ||
+                modelTestResults.refine) && (
+                <div className="mt-3 space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+                  {modelResultItems.map(({ label, result }) =>
+                    result ? (
+                      <div
+                        key={label}
+                        className="rounded-lg bg-white px-3 py-2 dark:bg-neutral-950"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-medium text-neutral-800 dark:text-neutral-200">
+                            {label}
+                          </span>
+                          <span
+                            className={`text-[11px] font-medium ${
+                              result.ok
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-red-500'
+                            }`}
+                          >
+                            {result.ok ? 'OK' : 'Failed'}
+                          </span>
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                          {result.configured}
+                        </p>
+                        <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                          {result.message}
+                        </p>
+                      </div>
+                    ) : null
+                  )}
+                </div>
               )}
 
               <div className="mt-4 flex items-center justify-end gap-2">
@@ -897,17 +1169,32 @@ export default function OpenRouterRefinePage() {
                 )}
                 <button
                   onClick={() => setIsKeyModalOpen(false)}
-                  disabled={openRouterKeyStatus === 'saving'}
+                  disabled={
+                    openRouterKeyStatus === 'saving' ||
+                    modelTestStatus === 'testing'
+                  }
                   className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
                 >
                   Cancel
                 </button>
                 <button
+                  onClick={testOpenRouterModels}
+                  disabled={
+                    !isLoggedIn ||
+                    modelTestStatus === 'testing' ||
+                    openRouterKeyStatus === 'saving'
+                  }
+                  className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-900 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  {modelTestStatus === 'testing' ? 'Testing...' : 'Test'}
+                </button>
+                <button
                   onClick={persistOpenRouterKey}
                   disabled={
                     !isLoggedIn ||
-                    !openRouterKeyInput.trim() ||
-                    openRouterKeyStatus === 'saving'
+                    (!openRouterKeyInput.trim() && !hasOpenRouterKey) ||
+                    openRouterKeyStatus === 'saving' ||
+                    modelTestStatus === 'testing'
                   }
                   className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
                 >
