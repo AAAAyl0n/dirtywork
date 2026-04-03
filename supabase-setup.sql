@@ -46,3 +46,32 @@ CREATE POLICY "Users can delete own history"
   FOR DELETE 
   USING (auth.uid() = user_id);
 
+-- 创建 user_api_keys 表
+CREATE TABLE user_api_keys (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  openrouter_api_key TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE user_api_keys ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own api keys"
+  ON user_api_keys
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own api keys"
+  ON user_api_keys
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own api keys"
+  ON user_api_keys
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own api keys"
+  ON user_api_keys
+  FOR DELETE
+  USING (auth.uid() = user_id);
