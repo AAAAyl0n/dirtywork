@@ -31,6 +31,29 @@ function createOpenRouterClient(apiKey: string) {
   })
 }
 
+function extractTextFromPart(part: unknown): string {
+  if (typeof part === 'string') return part
+
+  if (!part || typeof part !== 'object') return ''
+
+  const candidate = part as Record<string, unknown>
+
+  if (typeof candidate.text === 'string') return candidate.text
+  if (typeof candidate.content === 'string') return candidate.content
+
+  return ''
+}
+
+function extractTextPayload(payload: unknown): string {
+  if (typeof payload === 'string') return payload
+
+  if (Array.isArray(payload)) {
+    return payload.map(extractTextFromPart).join('')
+  }
+
+  return extractTextFromPart(payload)
+}
+
 function classifyError(error: unknown): {
   category: TestCategory
   message: string
@@ -116,7 +139,7 @@ async function testModel(
       )) as any
 
       for await (const part of response) {
-        content += part.choices[0]?.delta?.content || ''
+        content += extractTextPayload(part.choices[0]?.delta?.content)
       }
     } else {
       const response = await client.chat.completions.create(
@@ -136,7 +159,7 @@ async function testModel(
         }
       )
 
-      content = response.choices[0]?.message?.content?.trim() || ''
+      content = extractTextPayload(response.choices[0]?.message?.content).trim()
     }
 
     return {
